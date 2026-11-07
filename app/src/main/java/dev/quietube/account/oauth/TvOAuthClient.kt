@@ -67,7 +67,8 @@ class TvOAuthClient @Inject constructor(@TvHttp private val http: OkHttpClient,p
         requestBrowse("default",null,session)
     }
     suspend fun browse(browseId: String?,continuation: String?): JsonObject {
-        val id = when(browseId) { "FEwhat_to_watch" -> "default"; "FEplaylist_aggregation","FElibrary" -> "FEmy_youtube"; else -> browseId }
+        // TV serves FEplaylist_aggregation (the owner's playlists) itself; FEmy_youtube is a mixed overview page.
+        val id = if (browseId == "FEwhat_to_watch") "default" else browseId
         return request("browse",buildJsonObject { if (continuation != null) put("continuation",continuation) else put("browseId",id ?: "default") })
     }
     suspend fun request(endpoint: String,payload: JsonObject): JsonObject = withContext(Dispatchers.IO) { browseMutex.withLock {

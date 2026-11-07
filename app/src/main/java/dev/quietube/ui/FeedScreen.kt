@@ -31,6 +31,8 @@ fun FeedScreen(state: FeedState, session: SessionStatus, select: (AccountFeed) -
     pullRefresh: () -> Unit = refresh) {
     val listState = rememberLazyListState()
     PrefetchVisibleVideos(listState, prefetch)
+    // An opened playlist is screen state, not a navigation entry; Back returns to the library.
+    androidx.activity.compose.BackHandler(enabled = state.playlist != null, onBack = back)
     LaunchedEffect(state.feed, state.playlist?.id) { listState.scrollToItem(0) }
     LaunchedEffect(listState, state.hasMore, state.loading, state.loadingMore, state.automaticPaging) {
         if (state.hasMore && !state.loading && !state.loadingMore && state.automaticPaging) {
@@ -53,12 +55,10 @@ fun FeedScreen(state: FeedState, session: SessionStatus, select: (AccountFeed) -
             }
             androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = pullRefresh, modifier = Modifier.fillMaxSize()) {
             LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                item {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(state.playlist?.title ?: if (session.signedIn) state.feed.label() else "Your local feed",
-                            style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                    }
-                }
+                // The selected chip already names the feed; only an opened playlist needs a title.
+                state.playlist?.let { opened -> item {
+                    Text(opened.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 20.dp))
+                } }
                 if (state.loading) item { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
                 if (!session.signedIn && state.feed == AccountFeed.Home) item {
                     Text("Search videos to build a feed on this phone, or sign in for your personal recommendations.",

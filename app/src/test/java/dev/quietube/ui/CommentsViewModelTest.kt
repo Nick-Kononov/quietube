@@ -46,6 +46,17 @@ class CommentsViewModelTest {
         store.mutable.value = PlaybackState(video = video("v")); advanceUntilIdle()
         assertEquals(1,calls)
     }
+    @Test fun pullRefreshKeepsCommentsVisibleUntilFreshPageArrives() = runTest(dispatcher) {
+        val store = PlaybackStateStore(); var calls = 0
+        val vm = CommentsViewModel(Repo { _,_ -> calls++; delay(100); Outcome.Success(CommentPage(listOf(comment("c$calls")))) },store)
+        store.mutable.value = PlaybackState(video = video("v")); advanceUntilIdle()
+        vm.pullRefresh(); runCurrent()
+        assertTrue(vm.state.value.refreshing)
+        assertEquals(listOf("c1"),vm.state.value.comments.map { it.id })
+        advanceUntilIdle()
+        assertFalse(vm.state.value.refreshing)
+        assertEquals(listOf("c2"),vm.state.value.comments.map { it.id })
+    }
     @Test fun failedPaginationKeepsCommentsAndRetriesSameCursor() = runTest(dispatcher) {
         val cursor = object : Continuation {}
         var calls = 0

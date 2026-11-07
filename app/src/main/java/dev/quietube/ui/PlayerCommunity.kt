@@ -21,8 +21,8 @@ import dev.quietube.data.Video
 import kotlinx.coroutines.launch
 
 @Composable
-internal fun PlayerCommunity(comments: CommentsState,more: () -> Unit,refresh: () -> Unit,related: List<Video>,play: (String) -> Unit,
-    prefetch: (List<String>) -> Unit,modifier: Modifier = Modifier) {
+internal fun PlayerCommunity(comments: CommentsState,more: () -> Unit,refresh: () -> Unit,pullRefresh: () -> Unit,related: List<Video>,
+    play: (String) -> Unit,prefetch: (List<String>) -> Unit,modifier: Modifier = Modifier) {
     val relatedList = androidx.compose.foundation.lazy.rememberLazyListState()
     PrefetchVisibleVideos(relatedList,prefetch)
     val pager = rememberPagerState(initialPage = 0,pageCount = { 2 })
@@ -34,7 +34,7 @@ internal fun PlayerCommunity(comments: CommentsState,more: () -> Unit,refresh: (
             Tab(selected = pager.currentPage == 1,onClick = { scope.launch { pager.animateScrollToPage(1) } },text = { Text("Related videos") })
         }
         HorizontalPager(state = pager,modifier = Modifier.weight(1f).fillMaxWidth(),verticalAlignment = Alignment.Top) { page ->
-            if (page == 0) CommentList(comments,more,refresh)
+            if (page == 0) CommentList(comments,more,refresh,pullRefresh)
             else LazyColumn(Modifier.fillMaxSize(),state = relatedList,contentPadding = PaddingValues(vertical = 16.dp),verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (related.isEmpty()) item { Text("No related videos available.",modifier = Modifier.padding(20.dp)) }
                 items(related,key = { it.url }) { video -> VideoCard(video) { play(video.url) } }
@@ -43,15 +43,12 @@ internal fun PlayerCommunity(comments: CommentsState,more: () -> Unit,refresh: (
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CommentList(state: CommentsState,more: () -> Unit,refresh: () -> Unit) {
+private fun CommentList(state: CommentsState,more: () -> Unit,refresh: () -> Unit,pullRefresh: () -> Unit) {
+    androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = state.refreshing,onRefresh = pullRefresh,modifier = Modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxSize(),contentPadding = PaddingValues(horizontal = 20.dp,vertical = 12.dp),verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item {
-            Row(Modifier.fillMaxWidth(),verticalAlignment = Alignment.CenterVertically) {
-                Text("Top comments",style = MaterialTheme.typography.labelMedium,modifier = Modifier.weight(1f))
-                TextButton(onClick = refresh,enabled = !state.loading && state.url != null) { Text("Refresh") }
-            }
-        }
+        item { Text("Top comments",style = MaterialTheme.typography.labelMedium) }
         if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         if (state.disabled) item { Text("Comments are turned off for this video.") }
         else if (!state.loading && state.error == null && state.comments.isEmpty()) item { Text("No comments yet.") }
@@ -63,6 +60,7 @@ private fun CommentList(state: CommentsState,more: () -> Unit,refresh: () -> Uni
         } }
         if (state.loadingMore) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         else if (state.hasMore && state.error == null) item { OutlinedButton(onClick = more,modifier = Modifier.fillMaxWidth()) { Text("Load more comments") } }
+    }
     }
 }
 

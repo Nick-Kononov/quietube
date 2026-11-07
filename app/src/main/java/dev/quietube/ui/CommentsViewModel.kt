@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.*
 
 data class CommentsState(val url: String? = null,val comments: List<Comment> = emptyList(),val loading: Boolean = false,
     val loadingMore: Boolean = false,val hasMore: Boolean = false,val disabled: Boolean = false,val total: Int? = null,
-    val error: VideoError? = null,val partial: Boolean = false)
+    val error: VideoError? = null,val partial: Boolean = false,val refreshing: Boolean = false)
 @HiltViewModel
 class CommentsViewModel @Inject constructor(private val repository: VideoRepository,playback: PlaybackStateStore) : ViewModel() {
     private val mutable = MutableStateFlow(CommentsState())
@@ -37,10 +37,19 @@ class CommentsViewModel @Inject constructor(private val repository: VideoReposit
         mutable.value = CommentsState(url = url,loading = true)
         load(url,null)
     }
+    /** Pull-to-refresh: reload the first page while current comments stay visible. */
+    fun pullRefresh() {
+        val state = mutable.value
+        val url = state.url ?: return
+        if (state.loading || state.refreshing) return
+        request?.cancel()
+        mutable.update { it.copy(refreshing = true,loadingMore = false,error = null) }
+        load(url,null)
+    }
     fun more() {
         val state = mutable.value
         val next = cursor ?: return
-        if (state.loading || state.loadingMore) return
+        if (state.loading || state.loadingMore || state.refreshing) return
         mutable.update { it.copy(loadingMore = true,error = null) }
         load(state.url ?: return,next)
     }
@@ -53,10 +62,10 @@ class CommentsViewModel @Inject constructor(private val repository: VideoReposit
                 is Outcome.Success -> {
                     cursor = result.value.continuation
                     mutable.update { it.copy(comments = ((if (next == null) emptyList() else it.comments)+result.value.comments).distinctBy(Comment::id),
-                        loading = false,loadingMore = false,disabled = result.value.disabled,total = result.value.total ?: it.total,
-                        hasMore = cursor != null,partial = it.partial || result.value.skippedItems,error = null) }
+                        loading = false,refreshing = false,loadingMore = false,disabled = result.value.disabled,total = result.value.total ?: it.total,
+                        hasMore = cursor != null,partial = (next != null && it.partial) || result.value.skippedItems,error = null) }
                 }
-                is Outcome.Failure -> mutable.update { it.copy(loading = false,loadingMore = false,error = result.error) }
+                is Outcome.Failure -> mutable.update { it.copy(loading = false,refreshing = false,loadingMore = false,error = result.error) }
             }
         }
     }

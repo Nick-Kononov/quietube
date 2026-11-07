@@ -41,7 +41,7 @@ import dev.quietube.data.Rating
 
 @Composable
 fun PlayerScreen(state: PlaybackState, controller: MediaController?, connectionError: Boolean, inPip: Boolean,
-    comments: CommentsState, moreComments: () -> Unit, refreshComments: () -> Unit,
+    comments: CommentsState, moreComments: () -> Unit, refreshComments: () -> Unit, pullRefreshComments: () -> Unit,
     engagement: EngagementState, rate: (Rating) -> Unit, subscribe: () -> Unit, refreshAccount: () -> Unit, history: (Boolean) -> Unit, estimates: (Boolean) -> Unit,
     back: () -> Unit, pip: () -> Unit, bounds: (Rect) -> Unit, quality: (Int?) -> Unit, play: (String) -> Unit, prefetch: (List<String>) -> Unit = {}) {
     var showQuality by remember { mutableStateOf(false) }
@@ -120,7 +120,7 @@ fun PlayerScreen(state: PlaybackState, controller: MediaController?, connectionE
                 TextButton(onClick = { state.video?.url?.let(play) }) { Text("Retry playback") }
             }
             key(state.video?.url) {
-                PlayerCommunity(comments,moreComments,refreshComments,state.related,play,prefetch,Modifier.weight(1f))
+                PlayerCommunity(comments,moreComments,refreshComments,pullRefreshComments,state.related,play,prefetch,Modifier.weight(1f))
             }
         }
     }

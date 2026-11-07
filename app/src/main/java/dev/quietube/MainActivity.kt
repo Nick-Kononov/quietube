@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("player") {
                             PlayerScreen(playing, controller, connectionError, inPip,
-                                comments = commentState,moreComments = comments::more,refreshComments = comments::refresh,
+                                comments = commentState,moreComments = comments::more,refreshComments = comments::refresh,pullRefreshComments = comments::pullRefresh,
                                 engagement = engagementState,rate = engagement::rate,subscribe = engagement::subscribe,refreshAccount = engagement::refresh,history = engagement::history,estimates = engagement::estimates,
                                 back = { nav.popBackStack() }, pip = { enterPip() },
                                 bounds = { if (it != playerBounds) { playerBounds = Rect(it); updatePip(pipEligible) } },

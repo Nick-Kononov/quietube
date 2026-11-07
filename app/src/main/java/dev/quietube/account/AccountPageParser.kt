@@ -14,7 +14,8 @@ object AccountPageParser {
         val tabs = root.obj("contents")?.obj("twoColumnBrowseResultsRenderer")?.arr("tabs")
         val selected = tabs?.mapNotNull { (it as? JsonObject)?.obj("tabRenderer") }
             ?.firstOrNull { it["selected"] == JsonPrimitive(true) }?.get("content")
-        val base = selected ?: root["contents"] ?: root
+        // TV continuation pages also repeat a stub "contents"; the new items are only in continuationContents.
+        val base = root["continuationContents"] ?: selected ?: root["contents"] ?: root
         val queue = ArrayDeque<Pair<JsonElement, Int>>()
         queue.add(base to 0)
         val videos = linkedMapOf<String, Video>(); val playlists = linkedMapOf<String, PlaylistSummary>()
@@ -32,7 +33,8 @@ object AccountPageParser {
                             "tileRenderer" -> {
                                 if (renderer != null) {
                                     val command = renderer.obj("onSelectCommand")
-                                    val id = command?.obj("watchEndpoint")?.str("videoId")
+                                    // TV history lists Shorts with reelWatchEndpoint; they are ordinary watch URLs too.
+                                    val id = (command?.obj("watchEndpoint") ?: command?.obj("reelWatchEndpoint"))?.str("videoId")
                                     val meta = renderer.obj("metadata")?.obj("tileMetadataRenderer")
                                     val header = renderer.obj("header")?.obj("tileHeaderRenderer")
                                     val title = text(meta?.get("title") ?: header?.get("title"))
@@ -49,9 +51,14 @@ object AccountPageParser {
                                             objects(header,"style").any { (it as? JsonPrimitive)?.content?.contains("LIVE") == true },
                                             percent?.let { if (seconds > 0) seconds*1000*it/100 else null }))
                                     } else {
+                                        // TV library tiles open playlists by browsing "VL<id>" rather than watching.
                                         val playlist = command?.obj("watchEndpoint")?.str("playlistId") ?: command?.obj("watchPlaylistEndpoint")?.str("playlistId")
+                                            ?: command?.obj("browseEndpoint")?.str("browseId")
+                                                ?.takeIf { renderer.str("contentType") == "TILE_CONTENT_TYPE_PLAYLIST" && it.startsWith("VL") }?.removePrefix("VL")
+                                        val size = objects(header,"thumbnailOverlayTimeStatusRenderer")
+                                            .map { text((it as? JsonObject)?.get("text")) }.firstOrNull { it.contains("video",true) }
                                         if (playlist != null && playlistId.matches(playlist) && title.isNotBlank())
-                                            playlists.putIfAbsent(playlist,PlaylistSummary(playlist,title,thumbnail(header),null))
+                                            playlists.putIfAbsent(playlist,PlaylistSummary(playlist,title,thumbnail(header),size))
                                         // TV navigation tiles may have no video/playlist; these are expected UI.
                                     }
                                 }

@@ -513,3 +513,21 @@ The player title now opens and closes the details section by itself; the
 Home and the other feeds refresh by pulling down. The current items stay visible
 until fresh results arrive, and a pull skips the 30-second feed cache. The Refresh
 button was removed.
+
+## Feed fixes and comment pull-to-refresh (0.5.2)
+
+- History was empty: on the TV client its tiles open Shorts with
+  `reelWatchEndpoint`, which the parser ignored. Those tiles are now videos.
+- History stopped after the first page: TV continuation responses also contain
+  a stub `contents`, and the parser read that instead of `continuationContents`.
+  Paging now continues (this affected every TV feed's continuation).
+- Playlists showed unrelated videos: the TV client remapped
+  `FEplaylist_aggregation` to `FEmy_youtube`, a mixed overview page. It now
+  requests the owner's playlists directly, and playlist tiles that open via
+  `browseEndpoint` `VL<id>` are parsed with their video count.
+- Back from an opened playlist returns to the playlist list instead of leaving
+  the app.
+- The feed name heading was removed (the selected chip already shows it); an
+  opened playlist still shows its title.
+- Comments refresh by pulling down, keeping current comments visible; the Refresh
+  button was removed.

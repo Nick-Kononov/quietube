@@ -24,6 +24,45 @@ class AccountParserTest {
         assertEquals("History entry",page.videos.single().title)
         assertEquals("fixture-second",page.token)
     }
+    @Test fun `tv history shorts tiles are videos and the grid continues`() {
+        val page = AccountPageParser.parse(accountJson.parseToJsonElement("""
+            {"contents":{"tvBrowseRenderer":{"content":{"tvSurfaceContentRenderer":{"content":{"gridRenderer":{
+              "items":[{"tileRenderer":{"contentType":"TILE_CONTENT_TYPE_VIDEO",
+                "onSelectCommand":{"reelWatchEndpoint":{"videoId":"abcdefghijk","sequenceParams":"x"}},
+                "header":{"tileHeaderRenderer":{"thumbnailOverlays":[{"thumbnailOverlayTimeStatusRenderer":{"text":{"simpleText":"0:45"}}}]}},
+                "metadata":{"tileMetadataRenderer":{"title":{"simpleText":"A short"}}}}}],
+              "continuations":[{"nextContinuationData":{"continuation":"history-next"}}]}}}}}}}
+        """).jsonObject)
+        assertEquals("https://www.youtube.com/watch?v=abcdefghijk",page.videos.single().url)
+        assertEquals(45L,page.videos.single().durationSeconds)
+        assertEquals("history-next",page.token)
+    }
+    @Test fun `tv continuation page reads continuationContents rather than the stub contents`() {
+        val page = AccountPageParser.parse(accountJson.parseToJsonElement("""
+            {"contents":{"tvBrowseRenderer":{"content":{"tvSurfaceContentRenderer":{}}}},
+             "continuationContents":{"gridContinuation":{
+              "items":[{"tileRenderer":{"contentType":"TILE_CONTENT_TYPE_VIDEO","onSelectCommand":{"watchEndpoint":{"videoId":"bcdefghijkl"}},
+                "metadata":{"tileMetadataRenderer":{"title":{"simpleText":"Older video"}}}}}],
+              "continuations":[{"nextContinuationData":{"continuation":"history-third"}}]}}}
+        """).jsonObject)
+        assertEquals("Older video",page.videos.single().title)
+        assertEquals("history-third",page.token)
+    }
+    @Test fun `tv playlist tiles browse to VL ids and carry their size`() {
+        val page = AccountPageParser.parse(accountJson.parseToJsonElement("""
+            {"contents":{"tvBrowseRenderer":{"content":{"tvSurfaceContentRenderer":{"content":{"gridRenderer":{"items":[
+              {"tileRenderer":{"contentType":"TILE_CONTENT_TYPE_PLAYLIST","onSelectCommand":{"browseEndpoint":{"browseId":"VLPLfixture123"}},
+                "header":{"tileHeaderRenderer":{"thumbnailOverlays":[{"thumbnailOverlayTimeStatusRenderer":{"text":{"runs":[{"text":"833"},{"text":" videos"}]}}}]}},
+                "metadata":{"tileMetadataRenderer":{"title":{"simpleText":"Favorite Songs"}}}}},
+              {"tileRenderer":{"contentType":"TILE_CONTENT_TYPE_PLAYLIST","onSelectCommand":{"browseEndpoint":{"browseId":"VLWL"}},
+                "metadata":{"tileMetadataRenderer":{"title":{"simpleText":"Watch later"}}}}},
+              {"tileRenderer":{"contentType":"TILE_CONTENT_TYPE_CHANNEL","onSelectCommand":{"browseEndpoint":{"browseId":"UCchannel"}},
+                "metadata":{"tileMetadataRenderer":{"title":{"simpleText":"A channel"}}}}}]}}}}}}}
+        """).jsonObject)
+        assertEquals(listOf("PLfixture123","WL"),page.playlists.map { it.id })
+        assertEquals("833 videos",page.playlists[0].countText)
+        assertTrue(page.videos.isEmpty())
+    }
     @Test fun `captured logged out home is a legitimate empty page`() {
         val page = AccountPageParser.parse(accountJson.parseToJsonElement(fixture("captured-public-empty-home.json")).jsonObject)
         assertTrue(page.videos.isEmpty()); assertFalse(page.skipped)
