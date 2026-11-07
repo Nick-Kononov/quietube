@@ -145,8 +145,7 @@ stable `platforms;android-37.0` as well as minor platform releases.
 
 ## Next phases (require go-ahead)
 
-4. History/progress reporting and account actions.
-5. SponsorBlock, downloads and settings.
+5. Watch Later add/remove, comment posting, SponsorBlock, downloads and settings.
 
 NewPipeExtractor is GPL-3.0-or-later. This project is licensed compatibly; see
 [LICENSE](LICENSE). Retain upstream notices when redistributing source/binaries.
@@ -441,3 +440,37 @@ Extractor APIs verified against the pinned release:
 
 - [CommentsInfo paging API](https://github.com/TeamNewPipe/NewPipeExtractor/blob/v0.26.5/extractor/src/main/java/org/schabi/newpipe/extractor/comments/CommentsInfo.java)
 - [Comment item fields](https://github.com/TeamNewPipe/NewPipeExtractor/blob/v0.26.5/extractor/src/main/java/org/schabi/newpipe/extractor/comments/CommentsInfoItem.java)
+
+### Playback throughput fix (0.4.3)
+
+YouTube's media servers throttle open-ended byte ranges to roughly real-time
+speed. Quietube fetched each split video/audio stream as one open-ended request,
+so a 1080p60 stream (6.9 Mbps) downloaded at 5.6–6.1 Mbps and playback stalled
+repeatedly. `ChunkedDataSource` now reads progressive `googlevideo.com` streams
+(those advertising `clen`) as consecutive 10 MB ranges, like yt-dlp and NewPipe.
+Manifests, live segments and bounded requests pass through unchanged.
+
+Measured for the same 1080p stream: 6.1 Mbps open-ended vs 130.7 Mbps chunked on
+the Pixel 8 (Wi-Fi), and 5.6 vs 325 Mbps from the development Mac.
+
+Also in this update: comment extraction starts after the stream resolves instead
+of competing with playback startup; player state no longer emits a UI update for
+every player event; picture-in-picture parameters are only sent to the system
+when they change.
+
+Debug builds log startup and stall timings under logcat tag `QuietubePerf`
+(`resolve_ms`, `first_frame_ms`, `stall_ms`, and a summary every 15 s of
+playback). No URLs or video IDs are logged:
+
+```sh
+./.tools/android-sdk/platform-tools/adb logcat -s QuietubePerf
+```
+
+Device tests in `ChunkedDataSourceDeviceTest` use an in-memory source. The live
+throughput comparison runs only when requested:
+
+```sh
+./.tools/android-sdk/platform-tools/adb shell am instrument -w -e live true \
+  -e class 'dev.quietube.playback.ChunkedDataSourceDeviceTest#liveThroughputOnThisDevice' \
+  dev.quietube.test/androidx.test.runner.AndroidJUnitRunner
+```

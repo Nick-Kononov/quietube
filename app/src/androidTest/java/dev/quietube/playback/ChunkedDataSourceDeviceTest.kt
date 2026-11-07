@@ -28,7 +28,7 @@ import org.junit.runner.RunWith
 class ChunkedDataSourceDeviceTest {
     private val content = ByteArray(2_500) { (it % 251).toByte() }
     private val ranges = mutableListOf<LongRange>()
-    /** Records each upstream request; ByteArrayDataSource honours position/length like a Range request. */
+    /** Records each requested upstream range; ByteArrayDataSource serves position/length like a Range request. */
     private inner class Recording(private val inner: ByteArrayDataSource = ByteArrayDataSource(content)) : DataSource by inner {
         override fun open(dataSpec: DataSpec): Long {
             val opened = inner.open(dataSpec)
@@ -57,7 +57,8 @@ class ChunkedDataSourceDeviceTest {
     @Test fun contentShorterThanAdvertisedEndsCleanly() {
         val (_, bytes) = readAll(source(3_200), DataSpec(uri))
         assertArrayEquals(content, bytes)
-        assertEquals(listOf(0L..999L, 1_000L..1_999L, 2_000L..2_499L), ranges)
+        // The third request asks for a full chunk; the source has only 500 bytes left and reading stops there.
+        assertEquals(listOf(0L..999L, 1_000L..1_999L, 2_000L..2_999L), ranges)
     }
     @Test fun unknownSizeAndSmallRequestsPassThrough() {
         assertArrayEquals(content, readAll(source(null), DataSpec(uri)).second)
