@@ -481,3 +481,20 @@ throughput comparison runs only when requested:
   -e class 'dev.quietube.playback.ChunkedDataSourceDeviceTest#liveThroughputOnThisDevice' \
   dev.quietube.test/androidx.test.runner.AndroidJUnitRunner
 ```
+
+## Wi-Fi prefetch and rating buttons (0.5.0)
+
+On Wi-Fi, videos that stay visible for 400 ms in Home/feeds, search results or the
+Related tab are resolved before they are tapped (`PlaybackPrefetcher`), so a tap
+can start loading media immediately. At most six visible videos are queued and two
+resolve at a time; scrolling replaces the queue. A tap reuses a finished or
+in-flight result. Results are kept for one hour (stream URLs last about six) and at
+most 40 are kept. Failures are not cached, a tap that shared a failed prefetch makes
+its own attempt, and a rate-limit response pauses prefetching for ten minutes
+without affecting taps. If prefetched stream URLs are rejected, for example after
+moving from Wi-Fi to mobile data, the existing retry re-extracts instead of reusing
+the cache. Nothing is prefetched on mobile data.
+
+Like and dislike buttons now sit under the video title instead of inside the
+collapsed details. They show counts in compact form (dislike estimates are marked
+`≈`) and are enabled when signed in; tapping the active rating removes it.

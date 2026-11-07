@@ -48,6 +48,10 @@ interface VideoRepository : AccountActions {
     suspend fun playlist(id: String, continuation: Continuation? = null): Outcome<VideoPage>
     fun resumePosition(url: String): Long? = null
     suspend fun playback(url: String): Outcome<PlaybackDetails>
+    /** Forces the next playback() to re-extract, e.g. after the stream URLs were rejected. */
+    fun invalidatePlayback(url: String) {}
+    /** Videos currently visible in a list; may be resolved ahead of a tap. */
+    fun prefetch(urls: List<String>) {}
     suspend fun search(query: String, continuation: Continuation? = null): Outcome<VideoPage>
 }
 

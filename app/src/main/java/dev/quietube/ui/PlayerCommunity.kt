@@ -21,7 +21,10 @@ import dev.quietube.data.Video
 import kotlinx.coroutines.launch
 
 @Composable
-internal fun PlayerCommunity(comments: CommentsState,more: () -> Unit,refresh: () -> Unit,related: List<Video>,play: (String) -> Unit,modifier: Modifier = Modifier) {
+internal fun PlayerCommunity(comments: CommentsState,more: () -> Unit,refresh: () -> Unit,related: List<Video>,play: (String) -> Unit,
+    prefetch: (List<String>) -> Unit,modifier: Modifier = Modifier) {
+    val relatedList = androidx.compose.foundation.lazy.rememberLazyListState()
+    PrefetchVisibleVideos(relatedList,prefetch)
     val pager = rememberPagerState(initialPage = 0,pageCount = { 2 })
     val scope = rememberCoroutineScope()
     Column(modifier.fillMaxWidth()) {
@@ -32,7 +35,7 @@ internal fun PlayerCommunity(comments: CommentsState,more: () -> Unit,refresh: (
         }
         HorizontalPager(state = pager,modifier = Modifier.weight(1f).fillMaxWidth(),verticalAlignment = Alignment.Top) { page ->
             if (page == 0) CommentList(comments,more,refresh)
-            else LazyColumn(Modifier.fillMaxSize(),contentPadding = PaddingValues(vertical = 16.dp),verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            else LazyColumn(Modifier.fillMaxSize(),state = relatedList,contentPadding = PaddingValues(vertical = 16.dp),verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (related.isEmpty()) item { Text("No related videos available.",modifier = Modifier.padding(20.dp)) }
                 items(related,key = { it.url }) { video -> VideoCard(video) { play(video.url) } }
             }

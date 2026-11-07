@@ -42,7 +42,10 @@ fun QuietubeTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-fun SearchScreen(state: SearchState, edit: (String) -> Unit, search: (String) -> Unit, more: () -> Unit, play: (String) -> Unit, signedIn: Boolean, account: () -> Unit, home: () -> Unit) {
+fun SearchScreen(state: SearchState, edit: (String) -> Unit, search: (String) -> Unit, more: () -> Unit, play: (String) -> Unit, signedIn: Boolean, account: () -> Unit, home: () -> Unit,
+    prefetch: (List<String>) -> Unit = {}) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    PrefetchVisibleVideos(listState, prefetch)
     val keyboard = LocalSoftwareKeyboardController.current
     val submit: (String) -> Unit = { keyboard?.hide(); search(it) }
     Scaffold { insets ->
@@ -94,7 +97,7 @@ fun SearchScreen(state: SearchState, edit: (String) -> Unit, search: (String) ->
                         style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
                 }
             } else {
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 22.dp, bottom = 24.dp),
+                LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(top = 22.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp)) {
                     item {
                         Row(Modifier.padding(horizontal = 22.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -175,6 +178,11 @@ internal fun formatDuration(seconds: Long): String? = when {
 }
 internal fun displayLikeCount(accountCount: String?,publicCount: Long?): String =
     accountCount?.takeIf { it.isNotBlank() } ?: formatLikeCount(publicCount) ?: "—"
+/** Dislikes arrive as digits (Return YouTube Dislike) or as YouTube's own short text. */
+internal fun displayDislikeCount(count: String?,estimated: Boolean): String {
+    val text = count?.toLongOrNull()?.let(::formatLikeCount) ?: count?.takeIf { it.isNotBlank() } ?: return "—"
+    return if (estimated) "≈$text" else text
+}
 internal fun formatLikeCount(count: Long?): String? = when {
     count == null || count < 0 -> null
     count >= 1_000_000 -> String.format(Locale.US, "%.1fM", count / 1_000_000.0)

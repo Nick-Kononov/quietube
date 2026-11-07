@@ -18,6 +18,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.PictureInPictureAlt
+import androidx.compose.material.icons.rounded.ThumbDown
+import androidx.compose.material.icons.rounded.ThumbUp
+import androidx.compose.material.icons.outlined.ThumbDown
+import androidx.compose.material.icons.outlined.ThumbUp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,7 +43,7 @@ import dev.quietube.data.Rating
 fun PlayerScreen(state: PlaybackState, controller: MediaController?, connectionError: Boolean, inPip: Boolean,
     comments: CommentsState, moreComments: () -> Unit, refreshComments: () -> Unit,
     engagement: EngagementState, rate: (Rating) -> Unit, subscribe: () -> Unit, refreshAccount: () -> Unit, history: (Boolean) -> Unit, estimates: (Boolean) -> Unit,
-    back: () -> Unit, pip: () -> Unit, bounds: (Rect) -> Unit, quality: (Int?) -> Unit, play: (String) -> Unit) {
+    back: () -> Unit, pip: () -> Unit, bounds: (Rect) -> Unit, quality: (Int?) -> Unit, play: (String) -> Unit, prefetch: (List<String>) -> Unit = {}) {
     var showQuality by remember { mutableStateOf(false) }
     var detailsExpanded by rememberSaveable(state.video?.url) { mutableStateOf(false) }
     val videoOnly = inPip || LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -76,6 +82,7 @@ fun PlayerScreen(state: PlaybackState, controller: MediaController?, connectionE
                 }
                 Icon(if (detailsExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,if (detailsExpanded) "Collapse details" else "Expand details")
             }
+            RatingButtons(engagement,state.video?.likeCount,rate)
             AnimatedVisibility(detailsExpanded) {
                 Column(Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp,vertical = 8.dp)) {
                     Text(state.video?.channel.orEmpty(),color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -86,12 +93,6 @@ fun PlayerScreen(state: PlaybackState, controller: MediaController?, connectionE
                         }
                         Text("Background audio enabled", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = engagement.info.rating == Rating.Like,onClick = { rate(Rating.Like) },
-                            enabled = engagement.signedIn && !engagement.busy,label = { Text("Like · ${displayLikeCount(engagement.info.likes,state.video?.likeCount)}") })
-                        FilterChip(selected = engagement.info.rating == Rating.Dislike,onClick = { rate(Rating.Dislike) },
-                            enabled = engagement.signedIn && !engagement.busy,label = { Text("Dislike · ${if (engagement.info.estimatedDislikes) "≈" else ""}${engagement.info.dislikes ?: "—"}") })
                     }
                     if (engagement.signedIn) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -120,7 +121,7 @@ fun PlayerScreen(state: PlaybackState, controller: MediaController?, connectionE
                 TextButton(onClick = { state.video?.url?.let(play) }) { Text("Retry playback") }
             }
             key(state.video?.url) {
-                PlayerCommunity(comments,moreComments,refreshComments,state.related,play,Modifier.weight(1f))
+                PlayerCommunity(comments,moreComments,refreshComments,state.related,play,prefetch,Modifier.weight(1f))
             }
         }
     }
@@ -136,5 +137,24 @@ fun PlayerScreen(state: PlaybackState, controller: MediaController?, connectionE
                 }
             }
         }, confirmButton = { TextButton(onClick = { showQuality = false }) { Text("Done") } })
+    }
+}
+
+/** Always visible under the title; rating needs a signed-in session, counts show either way. */
+@Composable
+private fun RatingButtons(engagement: EngagementState,publicLikes: Long?,rate: (Rating) -> Unit) {
+    val enabled = engagement.signedIn && !engagement.busy && engagement.url != null
+    val liked = engagement.info.rating == Rating.Like
+    val disliked = engagement.info.rating == Rating.Dislike
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp),horizontalArrangement = Arrangement.spacedBy(8.dp),verticalAlignment = Alignment.CenterVertically) {
+        FilterChip(selected = liked,onClick = { rate(Rating.Like) },enabled = enabled,
+            leadingIcon = { Icon(if (liked) Icons.Rounded.ThumbUp else Icons.Outlined.ThumbUp,null,Modifier.size(18.dp)) },
+            label = { Text(displayLikeCount(engagement.info.likes,publicLikes)) },
+            modifier = Modifier.semantics { contentDescription = if (liked) "Remove like" else "Like" })
+        FilterChip(selected = disliked,onClick = { rate(Rating.Dislike) },enabled = enabled,
+            leadingIcon = { Icon(if (disliked) Icons.Rounded.ThumbDown else Icons.Outlined.ThumbDown,null,Modifier.size(18.dp)) },
+            label = { Text(displayDislikeCount(engagement.info.dislikes,engagement.info.estimatedDislikes)) },
+            modifier = Modifier.semantics { contentDescription = if (disliked) "Remove dislike" else "Dislike" })
+        if (!engagement.signedIn) Text("Sign in to rate",style = MaterialTheme.typography.labelSmall,color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

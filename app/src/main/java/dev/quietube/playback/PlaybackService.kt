@@ -4,8 +4,6 @@ package dev.quietube.playback
 
 import android.app.PendingIntent
 import android.content.Intent
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
 import androidx.media3.common.*
@@ -34,6 +32,7 @@ class PlaybackService : MediaSessionService() {
     @Inject lateinit var positions: ResumeDao
     @Inject lateinit var http: OkHttpClient
     @Inject lateinit var history: HistoryReporter
+    @Inject lateinit var network: NetworkStatus
     private lateinit var player: ExoPlayer
     private lateinit var sources: DefaultMediaSourceFactory
     private var session: MediaSession? = null
@@ -74,6 +73,7 @@ class PlaybackService : MediaSessionService() {
                     val url = details?.video?.url
                     if (blocked && retryCount == 0 && url != null) {
                         retryCount++
+                        repository.invalidatePlayback(url)
                         resolve(url, player.currentPosition, player.playWhenReady, resetRetries = false)
                     } else store.mutable.update { it.copy(resolving = false, buffering = false,
                         error = if (blocked) VideoError.StreamRejected else if (error.errorCode in 4000..4999) VideoError.UnsupportedPlayback else VideoError.Network) }
@@ -185,11 +185,7 @@ class PlaybackService : MediaSessionService() {
         player.playWhenReady = play
     }
 
-    private fun defaultQuality(): Int {
-        val manager = getSystemService(ConnectivityManager::class.java)
-        val caps = manager.getNetworkCapabilities(manager.activeNetwork)
-        return if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true) 1080 else 720
-    }
+    private fun defaultQuality(): Int = if (network.onWifi()) 1080 else 720
     private fun savePosition(): Job? {
         val current = details ?: return null
         if (current.video.isLive || player.currentMediaItem?.mediaId != current.video.url || player.playbackState == Player.STATE_IDLE) return null

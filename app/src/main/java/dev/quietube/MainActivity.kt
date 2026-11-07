@@ -32,6 +32,7 @@ import dev.quietube.ui.*
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @javax.inject.Inject lateinit var videos: dev.quietube.data.VideoRepository
     private var inPip by mutableStateOf(false)
     private var openPlayer by mutableStateOf(false)
     private var pendingVideo by mutableStateOf<String?>(null)
@@ -77,7 +78,7 @@ class MainActivity : ComponentActivity() {
                             FeedScreen(feed, session, feeds::select,
                                 search = { nav.navigate("search") { launchSingleTop = true } },
                                 account = { nav.navigate("account") { launchSingleTop = true } },
-                                refresh = feeds::refresh, more = feeds::more, play = play, playlist = feeds::open, back = feeds::back)
+                                refresh = feeds::refresh, more = feeds::more, play = play, playlist = feeds::open, back = feeds::back, prefetch = videos::prefetch)
                         }
                         composable("account") {
                             AccountScreen(session, accountUi, back = { nav.popBackStack() },
@@ -88,7 +89,7 @@ class MainActivity : ComponentActivity() {
                             val state by search.state.collectAsStateWithLifecycle()
                             SearchScreen(state, search::edit, search::search, search::more, play, session.signedIn,
                                 account = { nav.navigate("account") { launchSingleTop = true } },
-                                home = { nav.popBackStack("home", false); feeds.refresh() })
+                                home = { nav.popBackStack("home", false); feeds.refresh() }, prefetch = videos::prefetch)
                         }
                         composable("player") {
                             PlayerScreen(playing, controller, connectionError, inPip,
@@ -96,7 +97,7 @@ class MainActivity : ComponentActivity() {
                                 engagement = engagementState,rate = engagement::rate,subscribe = engagement::subscribe,refreshAccount = engagement::refresh,history = engagement::history,estimates = engagement::estimates,
                                 back = { nav.popBackStack() }, pip = { enterPip() },
                                 bounds = { if (it != playerBounds) { playerBounds = Rect(it); updatePip(pipEligible) } },
-                                quality = playback::quality, play = playback::play)
+                                quality = playback::quality, play = playback::play, prefetch = videos::prefetch)
                         }
                     }
                     if (!playerVisible && playing.video != null && !inPip) {

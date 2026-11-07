@@ -26,8 +26,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 @Composable
 fun FeedScreen(state: FeedState, session: SessionStatus, select: (AccountFeed) -> Unit,
     search: () -> Unit, account: () -> Unit, refresh: () -> Unit, more: () -> Unit,
-    play: (String) -> Unit, playlist: (PlaylistSummary) -> Unit, back: () -> Unit) {
+    play: (String) -> Unit, playlist: (PlaylistSummary) -> Unit, back: () -> Unit, prefetch: (List<String>) -> Unit = {}) {
     val listState = rememberLazyListState()
+    PrefetchVisibleVideos(listState, prefetch)
     LaunchedEffect(state.feed, state.playlist?.id) { listState.scrollToItem(0) }
     LaunchedEffect(listState, state.hasMore, state.loading, state.loadingMore, state.automaticPaging) {
         if (state.hasMore && !state.loading && !state.loadingMore && state.automaticPaging) {

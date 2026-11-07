@@ -11,8 +11,8 @@ android {
         applicationId = "dev.quietube"
         minSdk = 26
         targetSdk = 37
-        versionCode = 10
-        versionName = "0.4.3"
+        versionCode = 11
+        versionName = "0.5.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }

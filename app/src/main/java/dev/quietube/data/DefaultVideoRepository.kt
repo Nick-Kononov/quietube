@@ -10,6 +10,7 @@ class DefaultVideoRepository @Inject constructor(
     private val anonymous: AnonymousSource,
     private val account: AccountSource,
     private val sessions: EncryptedSessionStore,
+    private val playbackCache: PlaybackPrefetcher,
 ) : VideoRepository {
     override suspend fun comments(url: String,continuation: Continuation?) = anonymous.comments(url,continuation)
     override suspend fun engagement(url: String) = account.engagement(url)
@@ -18,7 +19,9 @@ class DefaultVideoRepository @Inject constructor(
     override suspend fun startWatch(url: String,position: Double) = account.startWatch(url,position)
     override suspend fun reportWatch(ticket: WatchTicket,segments: List<Pair<Double,Double>>,position: Double,final: Boolean) = account.reportWatch(ticket,segments,position,final)
     private val local = java.util.concurrent.ConcurrentHashMap<String, Video>()
-    override suspend fun playback(url: String): Outcome<PlaybackDetails> = anonymous.playback(url)
+    override suspend fun playback(url: String): Outcome<PlaybackDetails> = playbackCache.get(url)
+    override fun invalidatePlayback(url: String) = playbackCache.invalidate(url)
+    override fun prefetch(urls: List<String>) = playbackCache.visible(urls)
     override suspend fun search(query: String, continuation: Continuation?): Outcome<VideoPage> {
         val result = anonymous.search(query.trim(), continuation)
         if (result is Outcome.Success) { result.value.videos.take(30).forEach { local[it.url] = it }; if (local.size > 100) local.clear() }

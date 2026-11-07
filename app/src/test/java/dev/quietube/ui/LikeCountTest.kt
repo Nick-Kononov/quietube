@@ -17,4 +17,10 @@ class LikeCountTest {
     @Test fun freshAccountCountWinsOverAnonymousSnapshot() {
         assertEquals("12.4K",displayLikeCount("12.4K",12_345))
     }
+    @Test fun dislikesUseCompactNumbersAndMarkEstimates() {
+        assertEquals("12.3K",displayDislikeCount("12345",estimated = false))
+        assertEquals("≈1.2M",displayDislikeCount("1234567",estimated = true))
+        assertEquals("Dislike",displayDislikeCount("Dislike",estimated = false))
+        assertEquals("—",displayDislikeCount(null,estimated = true))
+    }
 }
