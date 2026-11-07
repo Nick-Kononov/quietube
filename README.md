@@ -520,7 +520,8 @@ button was removed.
   `reelWatchEndpoint`, which the parser ignored. Those tiles are now videos.
 - History stopped after the first page: TV continuation responses also contain
   a stub `contents`, and the parser read that instead of `continuationContents`.
-  Paging now continues (this affected every TV feed's continuation).
+  Paging now continues. The fix applies to every TV feed; only History was
+  checked on the device.
 - Playlists showed unrelated videos: the TV client remapped
   `FEplaylist_aggregation` to `FEmy_youtube`, a mixed overview page. It now
   requests the owner's playlists directly, and playlist tiles that open via
