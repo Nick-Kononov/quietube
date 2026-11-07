@@ -20,10 +20,14 @@ class CommentsViewModel @Inject constructor(private val repository: VideoReposit
     private var request: Job? = null
     init {
         viewModelScope.launch {
-            playback.state.map { it.video?.url }.distinctUntilChanged().collect { url ->
-                request?.cancel(); cursor = null
-                mutable.value = CommentsState(url = url)
-                if (url != null) refresh()
+            var requested = false
+            playback.state.map { it.video?.url to it.resolving }.distinctUntilChanged().collect { (url,resolving) ->
+                if (url != mutable.value.url) {
+                    request?.cancel(); cursor = null; requested = false
+                    mutable.value = CommentsState(url = url,loading = url != null)
+                }
+                // Wait for stream resolution so comment extraction doesn't compete with playback startup.
+                if (url != null && !resolving && !requested) { requested = true; refresh() }
             }
         }
     }

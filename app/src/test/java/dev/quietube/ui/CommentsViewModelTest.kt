@@ -34,6 +34,18 @@ class CommentsViewModelTest {
         assertEquals("new",vm.state.value.url)
         assertEquals(listOf("new"),vm.state.value.comments.map { it.id })
     }
+    @Test fun commentsWaitForStreamResolutionAndDoNotReloadOnRetry() = runTest(dispatcher) {
+        val store = PlaybackStateStore(); var calls = 0
+        val vm = CommentsViewModel(Repo { url,_ -> calls++; Outcome.Success(CommentPage(listOf(comment(url)))) },store)
+        store.mutable.value = PlaybackState(video = video("v"),resolving = true); advanceUntilIdle()
+        assertEquals(0,calls); assertTrue(vm.state.value.loading)
+        store.mutable.value = PlaybackState(video = video("v")); advanceUntilIdle()
+        assertEquals(1,calls); assertEquals(listOf("v"),vm.state.value.comments.map { it.id })
+        // Re-extraction after an expired stream URL resolves the same video again.
+        store.mutable.value = PlaybackState(video = video("v"),resolving = true); advanceUntilIdle()
+        store.mutable.value = PlaybackState(video = video("v")); advanceUntilIdle()
+        assertEquals(1,calls)
+    }
     @Test fun failedPaginationKeepsCommentsAndRetriesSameCursor() = runTest(dispatcher) {
         val cursor = object : Continuation {}
         var calls = 0

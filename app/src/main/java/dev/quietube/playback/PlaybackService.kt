@@ -43,19 +43,23 @@ class PlaybackService : MediaSessionService() {
     private var details: PlaybackDetails? = null
     private var quality: Int? = null
     private var retryCount = 0
+    private val metrics: PlaybackMetrics? by lazy {
+        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) PlaybackMetrics() else null
+    }
 
     override fun onCreate() {
         super.onCreate()
-        sources = DefaultMediaSourceFactory(OkHttpDataSource.Factory(http).setUserAgent(ExtractorDownloader.USER_AGENT))
+        sources = DefaultMediaSourceFactory(ChunkedDataSource.Factory(OkHttpDataSource.Factory(http).setUserAgent(ExtractorDownloader.USER_AGENT)))
         player = ExoPlayer.Builder(this).setMediaSourceFactory(sources).build().apply {
             setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
             setHandleAudioBecomingNoisy(true)
             setWakeMode(C.WAKE_MODE_LOCAL)
+            metrics?.let(::addAnalyticsListener)
             addListener(object : Player.Listener {
                 override fun onEvents(player: Player, events: Player.Events) {
                     store.mutable.update { it.copy(isPlaying = player.isPlaying, playWhenReady = player.playWhenReady,
                         buffering = player.playbackState == Player.STATE_BUFFERING,
-                        actualHeight = player.videoSize.height, positionMs = player.currentPosition.coerceAtLeast(0)) }
+                        actualHeight = player.videoSize.height) }
                     if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) || events.contains(Player.EVENT_POSITION_DISCONTINUITY)
                         || events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
                         savePosition()
@@ -128,6 +132,7 @@ class PlaybackService : MediaSessionService() {
                 delay(1_000)
                 history.sample(player.currentMediaItem?.mediaId,player.currentPosition,player.isPlaying,speed = player.playbackParameters.speed)
                 if (++tick % 5 == 0) savePosition()
+                if (tick % 15 == 0 && player.isPlaying) metrics?.summary(player.videoSize.height)
             }
         }
     }
@@ -137,13 +142,14 @@ class PlaybackService : MediaSessionService() {
         savePosition()
         player.stop()
         player.clearMediaItems()
-        if (resetRetries) { retryCount = 0; details = null }
+        if (resetRetries) { retryCount = 0; details = null; metrics?.requested() }
         store.mutable.value = PlaybackState(video = details?.video ?: Video(url, "Loading video…", "", null, -1, -1, null), resolving = true)
         resolution = scope.launch {
             when (val result = repository.playback(url)) {
                 is Outcome.Failure -> store.mutable.update { it.copy(resolving = false, error = result.error) }
                 is Outcome.Success -> {
                     details = result.value
+                    metrics?.resolved()
                     val saved = start ?: withContext(Dispatchers.IO) { positions.position(result.value.video.url) } ?: repository.resumePosition(result.value.video.url) ?: 0L
                     prepare(result.value, if (result.value.video.isLive) 0 else resumablePosition(saved, result.value.video.durationSeconds * 1000), play)
                 }

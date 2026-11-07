@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
     private var pendingVideo by mutableStateOf<String?>(null)
     private var pipEligible = false
     private var playerBounds: Rect? = null
+    private var appliedPip: Pair<Boolean, Rect?>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -94,7 +95,7 @@ class MainActivity : ComponentActivity() {
                                 comments = commentState,moreComments = comments::more,refreshComments = comments::refresh,
                                 engagement = engagementState,rate = engagement::rate,subscribe = engagement::subscribe,refreshAccount = engagement::refresh,history = engagement::history,estimates = engagement::estimates,
                                 back = { nav.popBackStack() }, pip = { enterPip() },
-                                bounds = { playerBounds = it; updatePip(pipEligible) },
+                                bounds = { if (it != playerBounds) { playerBounds = Rect(it); updatePip(pipEligible) } },
                                 quality = playback::quality, play = playback::play)
                         }
                     }
@@ -126,6 +127,10 @@ class MainActivity : ComponentActivity() {
     private fun updatePip(eligible: Boolean) {
         pipEligible = eligible
         if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
+        // Called on every recomposition and layout pass; only cross into system_server when params change.
+        val requested = eligible to playerBounds
+        if (requested == appliedPip) return
+        appliedPip = requested
         val builder = PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9))
         playerBounds?.takeIf { !it.isEmpty }?.let(builder::setSourceRectHint)
         if (Build.VERSION.SDK_INT >= 31) builder.setAutoEnterEnabled(eligible).setSeamlessResizeEnabled(true)
