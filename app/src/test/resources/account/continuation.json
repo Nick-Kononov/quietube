@@ -1,0 +1,1 @@
+{"onResponseReceivedActions":[{"appendContinuationItemsAction":{"continuationItems":[{"playlistVideoRenderer":{"videoId":"history0001","title":{"simpleText":"History entry"},"lengthText":{"simpleText":"2:00"}}},{"continuationItemRenderer":{"continuationEndpoint":{"continuationCommand":{"token":"fixture-second"}}}}]}}]}

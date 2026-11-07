@@ -1,0 +1,14 @@
+{
+  "contents": {"twoColumnBrowseResultsRenderer": {"tabs": [
+    {"tabRenderer": {"selected":false,"content":{"videoRenderer":{"videoId":"ignored0001","title":{"simpleText":"Wrong tab"}}}}},
+    {"tabRenderer": {"selected":true,"content":{"richGridRenderer":{"contents":[
+      {"richItemRenderer":{"content":{"videoRenderer":{"videoId":"legacy00001","title":{"runs":[{"text":"Legacy title"}]},"ownerText":{"runs":[{"text":"Creator"}]},"lengthText":{"simpleText":"10:00"},"viewCountText":{"simpleText":"1.2M views"},"thumbnail":{"thumbnails":[{"url":"https://i.ytimg.com/small.jpg","width":120},{"url":"https://i.ytimg.com/large.jpg","width":480}]},"thumbnailOverlays":[{"thumbnailOverlayResumePlaybackRenderer":{"percentDurationWatched":25}}]}}}},
+      {"richItemRenderer":{"content":{"lockupViewModel":{"contentId":"modern00001","contentType":"LOCKUP_CONTENT_TYPE_VIDEO","metadata":{"lockupMetadataViewModel":{"title":{"content":"Modern title"},"metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[{"text":{"content":"Modern creator"}}]},{"metadataParts":[{"text":{"content":"1,234 views"}},{"text":{"content":"2 days ago"}}]}]}}}},"contentImage":{"thumbnailViewModel":{"image":{"sources":[{"url":"https://i.ytimg.com/modern.jpg","width":640}]},"overlays":[{"thumbnailOverlayBadgeViewModel":{"thumbnailBadges":[{"thumbnailBadgeViewModel":{"text":"1:02:03"}}]}}]}}}}}},
+      {"videoRenderer":{"videoId":"bad","title":{"simpleText":"Malformed item"}}},
+      {"futureRenderer":{"unknown":"Skip this safely"}},
+      {"adSlotRenderer":{"videoRenderer":{"videoId":"advert00001","title":{"simpleText":"Ad"}}}},
+      {"playlistRenderer":{"playlistId":"PLfixture","title":{"simpleText":"My playlist"},"videoCountText":{"simpleText":"3 videos"}}},
+      {"continuationItemRenderer":{"continuationEndpoint":{"continuationCommand":{"token":"fixture-next"}}}}
+    ]}}}}
+  ]}}
+}

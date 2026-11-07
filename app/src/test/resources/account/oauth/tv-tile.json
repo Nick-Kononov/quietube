@@ -1,0 +1,128 @@
+{
+  "contents": {
+    "tvBrowseRenderer": {
+      "content": {
+        "tvSurfaceContentRenderer": {
+          "content": {
+            "sectionListRenderer": {
+              "contents": [
+                {
+                  "shelfRenderer": {
+                    "content": {
+                      "horizontalListRenderer": {
+                        "items": [
+                          {
+                            "tileRenderer": {
+                              "onSelectCommand": {
+                                "watchEndpoint": {
+                                  "videoId": "tvvideo0001",
+                                  "startTimeSeconds": 20
+                                }
+                              },
+                              "header": {
+                                "tileHeaderRenderer": {
+                                  "thumbnail": {
+                                    "thumbnails": [
+                                      {
+                                        "url": "https://i.ytimg.com/fixture.jpg",
+                                        "width": 480
+                                      }
+                                    ]
+                                  },
+                                  "thumbnailOverlays": [
+                                    {
+                                      "thumbnailOverlayTimeStatusRenderer": {
+                                        "text": {
+                                          "simpleText": "3:20"
+                                        },
+                                        "style": "DEFAULT"
+                                      }
+                                    },
+                                    {
+                                      "thumbnailOverlayResumePlaybackRenderer": {
+                                        "percentDurationWatched": 10
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              "metadata": {
+                                "tileMetadataRenderer": {
+                                  "title": {
+                                    "simpleText": "TV fixture video"
+                                  },
+                                  "lines": [
+                                    {
+                                      "lineRenderer": {
+                                        "items": [
+                                          {
+                                            "lineItemRenderer": {
+                                              "text": {
+                                                "simpleText": "Fixture creator"
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    {
+                                      "lineRenderer": {
+                                        "items": [
+                                          {
+                                            "lineItemRenderer": {
+                                              "text": {
+                                                "simpleText": "12K views"
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "lineItemRenderer": {
+                                              "text": {
+                                                "simpleText": "1 day ago"
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "tileRenderer": {
+                              "onSelectCommand": {
+                                "browseEndpoint": {
+                                  "browseId": "FEsubscriptions"
+                                }
+                              },
+                              "metadata": {
+                                "tileMetadataRenderer": {
+                                  "title": {
+                                    "simpleText": "Navigation tile"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        ],
+                        "continuations": [
+                          {
+                            "nextContinuationData": {
+                              "continuation": "tv-next-fixture"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
