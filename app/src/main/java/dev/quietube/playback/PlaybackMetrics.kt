@@ -4,11 +4,22 @@ package dev.quietube.playback
 
 import android.os.SystemClock
 import android.util.Log
+import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.HttpDataSource
+import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.source.LoadEventInfo
+import androidx.media3.exoplayer.source.MediaLoadData
+import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 
 /** Debug builds only: startup and stall timings under logcat tag QuietubePerf. Never logs URLs or video IDs. */
-internal class PlaybackMetrics : AnalyticsListener {
+internal class PlaybackMetrics : AnalyticsListener, TransferListener {
+    private class Transfer(val startedAt: Long) { var bytes = 0L }
+    private val transfers = ConcurrentHashMap<DataSource, Transfer>()
     private var requestedAt = 0L
     private var firstFrame = false
     private var ready = false
@@ -44,6 +55,26 @@ internal class PlaybackMetrics : AnalyticsListener {
     override fun onDroppedVideoFrames(eventTime: AnalyticsListener.EventTime, droppedFrames: Int, elapsedMs: Long) { dropped += droppedFrames }
     override fun onBandwidthEstimate(eventTime: AnalyticsListener.EventTime, totalLoadTimeMs: Int, totalBytesLoaded: Long, bitrateEstimate: Long) {
         bandwidth = bitrateEstimate
+    }
+    override fun onLoadError(eventTime: AnalyticsListener.EventTime, loadEventInfo: LoadEventInfo, mediaLoadData: MediaLoadData,
+        error: IOException, wasCanceled: Boolean) {
+        val code = (error as? HttpDataSource.InvalidResponseCodeException)?.responseCode
+        log("load_error track=${mediaLoadData.trackType} error=${error.javaClass.simpleName} code=$code cause=${error.cause?.javaClass?.simpleName}")
+    }
+
+    // Network transfers run on loader threads; one transfer at a time per data source.
+    override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
+    override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {
+        if (isNetwork) transfers[source] = Transfer(SystemClock.elapsedRealtime())
+    }
+    override fun onBytesTransferred(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean, bytesTransferred: Int) {
+        if (isNetwork) transfers[source]?.let { it.bytes += bytesTransferred }
+    }
+    override fun onTransferEnd(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {
+        val transfer = transfers.remove(source) ?: return
+        val ms = (SystemClock.elapsedRealtime() - transfer.startedAt).coerceAtLeast(1)
+        val requested = if (dataSpec.length == C.LENGTH_UNSET.toLong()) "open" else dataSpec.length.toString()
+        log("transfer offset=${dataSpec.position} requested=$requested bytes=${transfer.bytes} ms=$ms mbps=${transfer.bytes * 8 / ms / 1000}")
     }
     private fun log(message: String) = Log.i("QuietubePerf", message)
 }

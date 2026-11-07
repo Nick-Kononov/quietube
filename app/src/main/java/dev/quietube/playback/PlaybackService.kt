@@ -49,7 +49,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
-        sources = DefaultMediaSourceFactory(ChunkedDataSource.Factory(OkHttpDataSource.Factory(http).setUserAgent(ExtractorDownloader.USER_AGENT)))
+        sources = DefaultMediaSourceFactory(ChunkedDataSource.Factory(OkHttpDataSource.Factory(http).setUserAgent(ExtractorDownloader.USER_AGENT).setTransferListener(metrics)))
         player = ExoPlayer.Builder(this).setMediaSourceFactory(sources).build().apply {
             setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
             setHandleAudioBecomingNoisy(true)

@@ -447,11 +447,18 @@ YouTube's media servers throttle open-ended byte ranges to roughly real-time
 speed. Quietube fetched each split video/audio stream as one open-ended request,
 so a 1080p60 stream (6.9 Mbps) downloaded at 5.6–6.1 Mbps and playback stalled
 repeatedly. `ChunkedDataSource` now reads progressive `googlevideo.com` streams
-(those advertising `clen`) as consecutive 10 MB ranges, like yt-dlp and NewPipe.
-Manifests, live segments and bounded requests pass through unchanged.
+(those advertising `clen`) as consecutive bounded ranges of at most 10 MB, like
+yt-dlp and NewPipe. Streams smaller than one chunk, typically audio, also get a
+bounded range: the throttle applies to any open-ended request and holds audio near
+real time, which caused a 24.7 s stall before this was fixed. Manifests and live
+segments without `clen` pass through unchanged.
 
 Measured for the same 1080p stream: 6.1 Mbps open-ended vs 130.7 Mbps chunked on
-the Pixel 8 (Wi-Fi), and 5.6 vs 325 Mbps from the development Mac.
+the Pixel 8 (Wi-Fi), and 5.6 vs 325 Mbps from the development Mac. A 60 s 1080p60
+playback run on the Pixel afterwards had no stalls and no dropped frames; video
+chunks loaded at 61–108 Mbps. Cold start was 3.6 s to resolve and 5.7 s to the first
+frame. Transfers while the 50 s buffer is full appear slow in `transfer` logs
+because the player pauses reading, not because of throttling.
 
 Also in this update: comment extraction starts after the stream resolves instead
 of competing with playback startup; player state no longer emits a UI update for

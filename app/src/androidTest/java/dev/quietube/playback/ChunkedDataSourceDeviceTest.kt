@@ -28,17 +28,19 @@ import org.junit.runner.RunWith
 class ChunkedDataSourceDeviceTest {
     private val content = ByteArray(2_500) { (it % 251).toByte() }
     private val ranges = mutableListOf<LongRange>()
+    private val requestedLengths = mutableListOf<Long>()
     /** Records each requested upstream range; ByteArrayDataSource serves position/length like a Range request. */
     private inner class Recording(private val inner: ByteArrayDataSource = ByteArrayDataSource(content)) : DataSource by inner {
         override fun open(dataSpec: DataSpec): Long {
             val opened = inner.open(dataSpec)
             ranges += dataSpec.position until dataSpec.position + opened
+            requestedLengths += dataSpec.length
             return opened
         }
         override fun read(buffer: ByteArray, offset: Int, length: Int) = inner.read(buffer, offset, length)
         override fun close() = inner.close()
     }
-    private fun source(advertised: Long?) = ChunkedDataSource(Recording(), 1_000) { advertised }
+    private fun source(advertised: Long?, chunk: Long = 1_000) = ChunkedDataSource(Recording(), chunk) { advertised }
     private fun readAll(source: DataSource, spec: DataSpec): Pair<Long, ByteArray> {
         val opened = source.open(spec)
         val out = ByteArrayOutputStream(); val buffer = ByteArray(333)
@@ -60,10 +62,15 @@ class ChunkedDataSourceDeviceTest {
         // The third request asks for a full chunk; the source has only 500 bytes left and reading stops there.
         assertEquals(listOf(0L..999L, 1_000L..1_999L, 2_000L..2_999L), ranges)
     }
-    @Test fun unknownSizeAndSmallRequestsPassThrough() {
+    @Test fun unknownSizePassesThroughOpenEnded() {
         assertArrayEquals(content, readAll(source(null), DataSpec(uri)).second)
+        assertEquals(listOf(C.LENGTH_UNSET.toLong()), requestedLengths)
+    }
+    @Test fun streamsSmallerThanOneChunkStillUseBoundedRanges() {
+        val (opened, bytes) = readAll(source(2_500, chunk = 10_000), DataSpec(uri))
+        assertEquals(2_500L, opened); assertArrayEquals(content, bytes)
         assertArrayEquals(content.copyOfRange(100, 600), readAll(source(2_500), DataSpec.Builder().setUri(uri).setPosition(100).setLength(500).build()).second)
-        assertEquals(listOf(0L..2_499L, 100L..599L), ranges)
+        assertEquals(listOf(2_500L, 500L), requestedLengths)
     }
     @Test fun onlyProgressiveGooglevideoUrlsAdvertiseLength() {
         assertEquals(1234L, youtubeContentLength(Uri.parse("https://rr1---sn-x.googlevideo.com/videoplayback?itag=299&clen=1234")))

@@ -29,7 +29,8 @@ class ChunkedDataSource(
 
     override fun open(dataSpec: DataSpec): Long {
         val end = chunkedEnd(dataSpec.position, dataSpec.length, contentLength(dataSpec.uri))
-        if (end == null || end - dataSpec.position <= chunkBytes) {
+        // Small streams (often audio) need a bounded range too: the throttle applies to any open-ended request.
+        if (end == null) {
             chunking = false
             return upstream.open(dataSpec)
         }
