@@ -78,7 +78,6 @@ fun PlayerScreen(state: PlaybackState, controller: MediaController?, connectionE
                 Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
                     Text(state.video?.title ?: "Choose a video from search",style = MaterialTheme.typography.titleMedium,maxLines = 2,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                    Text(if (detailsExpanded) "Hide details and controls" else "Details and controls",style = MaterialTheme.typography.labelSmall)
                 }
                 Icon(if (detailsExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,if (detailsExpanded) "Collapse details" else "Expand details")
             }

@@ -62,4 +62,5 @@ class InnerTubeAccountSource @Inject constructor(private val client: InnerTubeCl
         catch (e: Exception) { Outcome.Failure(InnerTubeClient.errorFor(e)) }
     }
     fun clear() { progress.clear(); cache.clear() }
+    override fun invalidateFeeds() = cache.clear()
 }

@@ -78,7 +78,8 @@ class MainActivity : ComponentActivity() {
                             FeedScreen(feed, session, feeds::select,
                                 search = { nav.navigate("search") { launchSingleTop = true } },
                                 account = { nav.navigate("account") { launchSingleTop = true } },
-                                refresh = feeds::refresh, more = feeds::more, play = play, playlist = feeds::open, back = feeds::back, prefetch = videos::prefetch)
+                                refresh = feeds::refresh, more = feeds::more, play = play, playlist = feeds::open, back = feeds::back, prefetch = videos::prefetch,
+                                pullRefresh = feeds::pullRefresh)
                         }
                         composable("account") {
                             AccountScreen(session, accountUi, back = { nav.popBackStack() },
@@ -100,14 +101,8 @@ class MainActivity : ComponentActivity() {
                                 quality = playback::quality, play = playback::play, prefetch = videos::prefetch)
                         }
                     }
-                    if (!playerVisible && playing.video != null && !inPip) {
-                        Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp)) {
-                            TextButton(onClick = goPlayer, modifier = Modifier.weight(1f)) {
-                                Text(playing.video?.title.orEmpty(), maxLines = 1)
-                            }
-                            TextButton(onClick = playback::toggle) { Text(if (playing.isPlaying) "Pause" else "Play") }
-                        }
-                    }
+                    if (!playerVisible && playing.video != null && !inPip)
+                        MiniPlayer(playing, controller, expand = goPlayer, toggle = playback::toggle, close = playback::close)
                 }
             }
         }

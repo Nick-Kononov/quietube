@@ -23,10 +23,12 @@ import dev.quietube.account.SessionStatus
 import dev.quietube.data.*
 import kotlinx.coroutines.flow.distinctUntilChanged
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun FeedScreen(state: FeedState, session: SessionStatus, select: (AccountFeed) -> Unit,
     search: () -> Unit, account: () -> Unit, refresh: () -> Unit, more: () -> Unit,
-    play: (String) -> Unit, playlist: (PlaylistSummary) -> Unit, back: () -> Unit, prefetch: (List<String>) -> Unit = {}) {
+    play: (String) -> Unit, playlist: (PlaylistSummary) -> Unit, back: () -> Unit, prefetch: (List<String>) -> Unit = {},
+    pullRefresh: () -> Unit = refresh) {
     val listState = rememberLazyListState()
     PrefetchVisibleVideos(listState, prefetch)
     LaunchedEffect(state.feed, state.playlist?.id) { listState.scrollToItem(0) }
@@ -49,12 +51,12 @@ fun FeedScreen(state: FeedState, session: SessionStatus, select: (AccountFeed) -
                 AccountFeed.entries.forEach { feed -> FilterChip(selected = state.feed == feed, onClick = { select(feed) },
                     label = { Text(feed.label()) }, enabled = session.signedIn || feed == AccountFeed.Home) }
             }
+            androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = pullRefresh, modifier = Modifier.fillMaxSize()) {
             LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 item {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(state.playlist?.title ?: if (session.signedIn) state.feed.label() else "Your local feed",
                             style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                        TextButton(onClick = refresh, enabled = !state.loading) { Text("Refresh") }
                     }
                 }
                 if (state.loading) item { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
@@ -89,6 +91,7 @@ fun FeedScreen(state: FeedState, session: SessionStatus, select: (AccountFeed) -
                         else OutlinedButton(onClick = more) { Text("Load more") }
                     }
                 }
+            }
             }
         }
     }

@@ -22,6 +22,7 @@ class DefaultVideoRepository @Inject constructor(
     override suspend fun playback(url: String): Outcome<PlaybackDetails> = playbackCache.get(url)
     override fun invalidatePlayback(url: String) = playbackCache.invalidate(url)
     override fun prefetch(urls: List<String>) = playbackCache.visible(urls)
+    override fun invalidateFeeds() = account.invalidateFeeds()
     override suspend fun search(query: String, continuation: Continuation?): Outcome<VideoPage> {
         val result = anonymous.search(query.trim(), continuation)
         if (result is Outcome.Success) { result.value.videos.take(30).forEach { local[it.url] = it }; if (local.size > 100) local.clear() }

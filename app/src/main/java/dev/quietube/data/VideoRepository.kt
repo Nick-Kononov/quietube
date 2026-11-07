@@ -52,6 +52,8 @@ interface VideoRepository : AccountActions {
     fun invalidatePlayback(url: String) {}
     /** Videos currently visible in a list; may be resolved ahead of a tap. */
     fun prefetch(urls: List<String>) {}
+    /** Drops short-lived feed caches so an explicit refresh fetches from YouTube. */
+    fun invalidateFeeds() {}
     suspend fun search(query: String, continuation: Continuation? = null): Outcome<VideoPage>
 }
 
@@ -64,6 +66,7 @@ interface AnonymousSource {
 
 /** Credentials never enter AnonymousSource. */
 interface AccountSource : AccountActions {
+    fun invalidateFeeds() {}
     suspend fun playlist(id: String, continuation: Continuation? = null): Outcome<VideoPage>
     fun resumePosition(url: String): Long? = null
     suspend fun feed(feed: AccountFeed, continuation: Continuation? = null): Outcome<VideoPage>

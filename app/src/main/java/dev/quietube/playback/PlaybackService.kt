@@ -89,7 +89,8 @@ class PlaybackService : MediaSessionService() {
                 val builder = MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller)
                 if (controller.packageName == packageName) builder.setAvailableSessionCommands(
                     MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
-                        .add(SessionCommand(PLAY_VIDEO, Bundle.EMPTY)).add(SessionCommand(SET_QUALITY, Bundle.EMPTY)).build())
+                        .add(SessionCommand(PLAY_VIDEO, Bundle.EMPTY)).add(SessionCommand(SET_QUALITY, Bundle.EMPTY))
+                        .add(SessionCommand(CLOSE, Bundle.EMPTY)).build())
                 return Futures.immediateFuture(builder.build())
             }
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo,
@@ -110,6 +111,7 @@ class PlaybackService : MediaSessionService() {
                             prepare(current, player.currentPosition, player.playWhenReady)
                         }
                     }
+                    CLOSE -> close()
                     else -> return Futures.immediateFuture(SessionResult(SessionError.ERROR_NOT_SUPPORTED))
                 }
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
@@ -185,6 +187,15 @@ class PlaybackService : MediaSessionService() {
         player.playWhenReady = play
     }
 
+    /** Mini-player close: keep resume progress and send final watch time, then drop the video entirely. */
+    private fun close() {
+        resolution?.cancel()
+        savePosition()
+        history.sample(player.currentMediaItem?.mediaId, player.currentPosition, false, speed = player.playbackParameters.speed)
+        details = null; quality = null
+        player.stop(); player.clearMediaItems()
+        store.mutable.value = PlaybackState()
+    }
     private fun defaultQuality(): Int = if (network.onWifi()) 1080 else 720
     private fun savePosition(): Job? {
         val current = details ?: return null
@@ -212,5 +223,6 @@ class PlaybackService : MediaSessionService() {
     companion object {
         const val PLAY_VIDEO = "dev.quietube.PLAY_VIDEO"
         const val SET_QUALITY = "dev.quietube.SET_QUALITY"
+        const val CLOSE = "dev.quietube.CLOSE"
     }
 }

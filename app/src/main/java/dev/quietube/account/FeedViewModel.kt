@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 private val Context.feedPreferences by preferencesDataStore("feed_preferences")
 data class FeedState(val feed: AccountFeed = AccountFeed.Home, val playlist: PlaylistSummary? = null,
     val videos: List<Video> = emptyList(), val playlists: List<PlaylistSummary> = emptyList(),
-    val loading: Boolean = false, val loadingMore: Boolean = false, val hasMore: Boolean = false,
+    val loading: Boolean = false, val refreshing: Boolean = false, val loadingMore: Boolean = false, val hasMore: Boolean = false,
     val error: VideoError? = null, val partial: Boolean = false, val automaticPaging: Boolean = true)
 @HiltViewModel
 class FeedViewModel @Inject constructor(private val repository: VideoRepository, private val sessions: EncryptedSessionStore,
@@ -52,6 +52,14 @@ class FeedViewModel @Inject constructor(private val repository: VideoRepository,
         mutable.update { it.copy(loading = true, loadingMore = false, error = null, videos = emptyList(), playlists = emptyList(), hasMore = false) }
         load(false)
     }
+    /** Pull-to-refresh: fetch fresh results while the current items stay on screen. */
+    fun pullRefresh() {
+        if (mutable.value.loading || mutable.value.refreshing) return
+        request?.cancel(); cursor = null
+        repository.invalidateFeeds()
+        mutable.update { it.copy(refreshing = true, loadingMore = false, error = null) }
+        load(false)
+    }
     fun more() {
         if (cursor == null || mutable.value.loading || mutable.value.loadingMore) return
         mutable.update { it.copy(loadingMore = true, error = null) }; load(true)
@@ -67,10 +75,10 @@ class FeedViewModel @Inject constructor(private val repository: VideoRepository,
                     cursor = result.value.continuation
                     mutable.update { it.copy(videos = ((if (append) it.videos else emptyList()) + result.value.videos).distinctBy(Video::url),
                         playlists = ((if (append) it.playlists else emptyList()) + result.value.playlists).distinctBy { item -> item.id },
-                        loading = false, loadingMore = false, hasMore = cursor != null, partial = result.value.skippedItems,
+                        loading = false, refreshing = false, loadingMore = false, hasMore = cursor != null, partial = result.value.skippedItems,
                         automaticPaging = !append || result.value.videos.isNotEmpty() || result.value.playlists.isNotEmpty()) }
                 }
-                is Outcome.Failure -> mutable.update { it.copy(loading = false, loadingMore = false, error = result.error) }
+                is Outcome.Failure -> mutable.update { it.copy(loading = false, refreshing = false, loadingMore = false, error = result.error) }
             }
         }
     }

@@ -498,3 +498,18 @@ the cache. Nothing is prefetched on mobile data.
 Like and dislike buttons now sit under the video title instead of inside the
 collapsed details. They show counts in compact form (dislike estimates are marked
 `≈`) and are enabled when signed in; tapping the active rating removes it.
+
+## Mini player and pull-to-refresh (0.5.1)
+
+Leaving the player while a video is active shows a mini player above the bottom
+edge of every screen: live video, title, channel, play/pause and a close (×)
+button. Tapping it reopens the full player. Close saves resume progress, sends the
+final watch-history interval and stops playback. Picture-in-picture still starts
+from the full player when leaving the app.
+
+The player title now opens and closes the details section by itself; the
+"Details and controls" label is gone (the chevron remains).
+
+Home and the other feeds refresh by pulling down. The current items stay visible
+until fresh results arrive, and a pull skips the 30-second feed cache. The Refresh
+button was removed.

@@ -49,6 +49,7 @@ class PlaybackViewModel @Inject constructor(@ApplicationContext context: Context
             catch (_: Exception) { mutableConnectionError.value = true }
         }
     }
+    fun close() { command(PlaybackService.CLOSE, Bundle.EMPTY) }
     fun toggle() { mutableController.value?.let { if (it.playWhenReady) it.pause() else it.play() } }
     override fun onCleared() {
         MediaController.releaseFuture(future)
