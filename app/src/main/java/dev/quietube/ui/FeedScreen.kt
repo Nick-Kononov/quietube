@@ -31,9 +31,12 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 fun FeedScreen(state: FeedState, session: SessionStatus,
     search: () -> Unit, account: () -> Unit, refresh: () -> Unit, more: () -> Unit,
     play: (String) -> Unit, playlist: (PlaylistSummary) -> Unit, back: () -> Unit, prefetch: (List<String>) -> Unit = {},
-    pullRefresh: () -> Unit = refresh, retry: () -> Unit = refresh, profile: Profile? = null, settings: (() -> Unit)? = null, reselect: Int = 0, active: Boolean = true) {
+    pullRefresh: () -> Unit = refresh, retry: () -> Unit = refresh, profile: Profile? = null, reselect: Int = 0, active: Boolean = true,thumbnailPrefetch: (List<ThumbnailRequest>) -> Unit = {}) {
     val listState = rememberLazyListState()
-    if (active) PrefetchVisibleVideos(listState, prefetch)
+    if (active) {
+        PrefetchVisibleVideos(listState, prefetch)
+        PrefetchVisibleThumbnails(listState,state.videos,thumbnailPrefetch)
+    }
     val restoreIndex = remember { listState.firstVisibleItemIndex }
     var restoring by remember { mutableStateOf(restoreIndex > 0 || listState.firstVisibleItemScrollOffset > 0) }
     // Refill pages before attaching the restored list, or a short first page would clamp its saved position.
@@ -72,7 +75,7 @@ fun FeedScreen(state: FeedState, session: SessionStatus,
             }
         }, scrollBehavior = scroll, actions = {
             IconButton(onClick = search) { Icon(Icons.Rounded.Search, "Search YouTube") }
-            AccountButton(session.signedIn, profile, account, settings)
+            AccountButton(session.signedIn, profile, account)
         })
     }) { insets ->
         Column(Modifier.fillMaxSize().padding(insets)) {
@@ -80,7 +83,7 @@ fun FeedScreen(state: FeedState, session: SessionStatus,
                 StatusMessage(Icons.Rounded.AccountCircle, state.feed.label(), "Sign in to see your ${state.feed.label().lowercase()}.", "Sign in", account)
                 return@Column
             }
-            androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = pullRefresh, modifier = Modifier.fillMaxSize()) {
+            RefreshBox(refreshing = state.refreshing, refresh = pullRefresh, modifier = Modifier.fillMaxSize()) {
             if (restoring) Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) { repeat(3) { VideoCardPlaceholder() } }
             else LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 if ((!state.initialized || state.loading) && state.videos.isEmpty() && state.playlists.isEmpty()) items(3) { VideoCardPlaceholder() }
@@ -89,7 +92,7 @@ fun FeedScreen(state: FeedState, session: SessionStatus,
                         modifier = Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 items(state.playlists, key = { "playlist:${it.id}" }, contentType = { "playlist" }) { item ->
-                    ListItem(headlineContent = { Text(item.title) }, supportingContent = { Text(item.countText ?: "Playlist") },
+                    ListItem(content = { Text(item.title) }, supportingContent = { Text(item.countText ?: "Playlist") },
                         leadingContent = { AsyncImage(item.thumbnailUrl, null, Modifier.width(120.dp).aspectRatio(16f / 9f).clip(MaterialTheme.shapes.small), contentScale = ContentScale.Crop) },
                         modifier = Modifier.clickable(role = androidx.compose.ui.semantics.Role.Button) { playlist(item) })
                 }
@@ -104,7 +107,7 @@ fun FeedScreen(state: FeedState, session: SessionStatus,
                 if (state.partial) item { Text("Some items could not be read and were skipped.", Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.bodySmall) }
                 if (state.hasMore) item {
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        if (state.loadingMore) CircularProgressIndicator(Modifier.size(28.dp))
+                        if (state.loadingMore) AppLoadingIndicator(Modifier.size(28.dp))
                         else OutlinedButton(onClick = more) { Text("Load more") }
                     }
                 }

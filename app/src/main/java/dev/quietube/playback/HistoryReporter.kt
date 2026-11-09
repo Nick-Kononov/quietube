@@ -48,7 +48,7 @@ class HistoryReporter @Inject constructor(private val repository: VideoRepositor
                 val segments = watched.drain()
                 if (ticket == null || segments.isEmpty()) return
                 when (val result = repository.reportWatch(ticket!!,segments,sample.position,!sample.playing)) {
-                    is Outcome.Success -> message(sample,"Watch progress sent to YouTube.")
+                    is Outcome.Success -> Unit
                     is Outcome.Failure -> message(sample,"Watch sync not confirmed (${result.error}); playback continues.")
                 }
                 sentAt = sample.elapsed
@@ -67,7 +67,7 @@ class HistoryReporter @Inject constructor(private val repository: VideoRepositor
                 watched.sample(sample)
                 if (ticket == null && sample.playing && sample.elapsed >= retryAt) {
                     when (val result = repository.startWatch(sample.url,sample.position)) {
-                        is Outcome.Success -> { ticket = result.value; message(sample,"Watch-history session started.") }
+                        is Outcome.Success -> { ticket = result.value }
                         is Outcome.Failure -> { retryAt = sample.elapsed+60_000; message(sample,"Watch sync unavailable (${result.error}); playback continues.") }
                     }
                 }

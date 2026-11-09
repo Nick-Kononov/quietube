@@ -761,3 +761,135 @@ stream URL handling, casting and playback-service logic are unchanged.
 Verification: debug assembly, all 130 offline JVM tests and lint passed (zero
 errors, 41 existing warnings, no new findings). Pixel checks and screenshots are
 recorded in [the Phase 4 report](ui-refresh/phase4-report.md). Phase 5 has not started.
+
+## UI refresh — Phase 5 (0.5.5)
+
+The app now uses Material 3 Expressive motion, connected rating toggles and
+filled/tonal subscription controls with shape and colour morphing. Accepted
+rating/subscription actions emit one Confirm haptic; recomposition, refresh and
+network rollback do not. Actions update immediately, serialize requests and
+roll back on failure with Retry. Unsubscribe offers Undo. Notice IDs, video
+context and account revisions prevent stale responses or snackbar actions from
+modifying a different video/account. The EngagementViewModel owns all action
+state; no new account storage or service integration was added.
+
+Indeterminate circular loaders use Expressive loading shapes, including
+pull-to-refresh. Remove animations switches them to static shapes and also
+stops skeleton shimmer. The observer reads the setting directly to avoid stale
+ValueAnimator cache values during a live setting change. Appearance settings,
+privacy restrictions and ScreenMotion's navigation/back timings are unchanged.
+
+Compose BOM is pinned to 2026.09.00 and Material 3 to 1.5.0-rc01. The owner
+approved the release candidate because stable 1.4.0 lacks the required APIs.
+The upgrade also migrates deprecated list, tab, sheet and search APIs. Search
+keeps its existing route/results/history and now uses TextFieldState with
+one-way draft updates, avoiding lost characters from a feedback loop.
+
+Verification: debug/sample assembly, all 143 offline JVM tests and lint pass
+(zero errors, 41 existing warnings, no new findings). Pixel checks cover
+anonymous playback, PiP, mini-player return, search typing/submission and an
+edge-back commit. Reduced-motion loading captures match pixel-for-pixel.
+A separate samples variant provides reproducible light/dark captures of the
+production controls using synthetic data; it does not read the owner's session.
+See [the Phase 5 report](ui-refresh/phase5-report.md) for screenshots, exact scope
+and remaining manual acceptance. Phase 6 has not started.
+
+## Phase 5 review fixes (0.5.6)
+
+The profile button now opens Account directly; Settings stays on Account. The
+persistent signed-out rating note is removed. Attempting to tap a disabled
+rating shows a short sign-in snackbar, without enabling the action; the same
+explanation is available as an accessibility action. Successful watch-history
+session starts and progress reports are silent. Failures still report that sync
+was not confirmed. The video buffering overlay returns to a white circular
+spinner; the mini player and other loaders retain Expressive indicators.
+
+Predictive-back completion now keeps the outgoing screen hidden until NavHost
+removes it. Previously our 450 ms animation reset its alpha while Navigation
+could retain the outgoing layer for its 1000 ms hold, revealing it again. The
+change preserves the gesture geometry and timings and supports another back
+gesture while the previous layer is still settling.
+
+Thumbnail loading was separate from playback prefetch: images only started
+loading when their cards appeared. Feeds, search and Related now warm two covers
+ahead and one behind through the existing anonymous Coil loader and cache, at
+the card's decoded size. Work is deduplicated, bounded to three requests and
+cancelled when no longer relevant. Speculation is restricted to unmetered Wi-Fi;
+visible images keep their existing network behaviour. Sign-out cancels pending
+look-ahead before wiping the image cache. No new dependency, credentials or
+network integration is involved. Outgoing search/player callbacks can no longer
+replace the active feed's playback-prefetch queue; Related only prefetches while
+its tab is selected.
+
+Six new offline tests cover cover selection, unknown/skeleton keys, image
+fallbacks, request reuse/cancellation, network policy, bounds and size changes.
+All 149 JVM tests pass with no new lint findings. Native checks on the Pixel
+confirm tap-only feedback, direct Account/Settings navigation, short/long
+edge-back completion and an offscreen 960 × 540 decoded thumbnail in memory.
+Updated synthetic light/dark samples are included in the Phase 5 report. The
+release variant is used for the final install to avoid debug rendering overhead.
+
+## Dark Settings flicker investigation
+
+The owner noticed a slight brightness flicker on empty-area taps in dark
+Settings on the Pixel 8. In the separate signed-out installation, a 15,000-pixel
+background region stayed exactly #101215 before and after tapping the empty
+Settings header. Display diagnostics instead showed the physical mode switching
+60 → 120 → 60 Hz on touch. Holding 120 Hz kept the mode stable, and the owner
+confirmed the visible flicker stopped. The temporary refresh/stay-awake overrides
+were restored after comparison; the owner chose to retain adaptive refresh.
+
+This was a display refresh-rate effect rather than an app background-colour
+change. No theme, ripple, navigation or playback change was made for it. A
+phone-wide fixed refresh rate is a workaround with a battery-use tradeoff;
+it is kept separate from the app defaults. Source and test results remain those
+of 0.5.6.
+
+## Foreground 120 Hz UI (0.5.7)
+
+Following the display-flicker diagnosis, the owner requested steady 120 Hz inside
+the app while retaining adaptive refresh for the phone. MainActivity now applies
+a window-scoped refresh-rate preference while resumed outside PiP. It selects
+120 Hz (including fractional 119.88 Hz modes) at the current resolution, falls
+back to an available rate on other displays, and restores the original window
+preference when paused or in PiP. Configuration/focus changes reapply the request
+without repeatedly rewriting unchanged attributes. Android 15+ window frame-rate
+balancing is disabled only while the foreground request is active and restored
+on release. No system setting, theme colour, artificial animation or permission
+was added. Android retains authority over user limits, power saving and thermal
+constraints.
+
+On the Pixel 8, dark Settings stayed at 120 Hz in all 15 measured idle/tap samples,
+with global min refresh unset and peak refresh unchanged. The window request
+cleared after leaving the app and entering PiP, then returned on PiP expansion.
+Playback and PiP worked in the isolated signed-out app. Five new offline tests
+cover Pixel/fractional modes, 90/60 Hz fallback, higher-rate-only displays and
+invalid/missing rates. Verification and final installation are recorded in the
+Phase 5 report.
+
+## Account idle refresh correction (0.5.8)
+
+The owner's Account-page report exposed a gap in the 0.5.7 check: DisplayManager
+reported the requested/cached 120 Hz, while SurfaceFlinger's pacesetter showed
+the actual render and physical modes dropping to 60 Hz while idle. Those earlier
+DisplayManager readings were insufficient to claim a steady physical 120 Hz.
+Explicit display-mode and View/Compose frame-rate preferences were tested but
+also allowed the compositor's idle fallback; they were not retained.
+
+SmoothRefreshRate now keeps a foreground-only, vsync-scheduled redraw cadence
+alongside the existing window preference. It changes no visual property and
+stops/removes its callback on pause and PiP. This keeps static pages active for
+the compositor, at the cost of higher GPU/battery use while the app is open and
+idle. Global adaptive settings, permissions and dependencies are unchanged.
+
+In the isolated Account screen, SurfaceFlinger—not DisplayManager—reported
+120 Hz render and physical modes in all 25 idle/tap samples. Lifecycle, release
+build and signed-in Account checks are recorded in the Phase 5 report. This is a
+rendering workaround for the panel/idle-policy interaction, not a theme-colour
+change or a claim that a refresh hint alone pins the panel.
+
+The installed optimized release also passed 25 signed-in Account idle/tap
+samples at a real 120 Hz, and the owner confirmed the visible flicker is gone.
+The PiP check rendered zero UI frames over two seconds with its refresh preference
+cleared. All 154 offline tests and builds passed, with no new lint findings.
+Temporary stay-awake was restored; global adaptive refresh remains enabled.

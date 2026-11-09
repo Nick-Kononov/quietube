@@ -25,13 +25,13 @@ internal fun QualitySheet(state: PlaybackState, snackbar: SnackbarHostState?, di
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
             Text("Video quality", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(20.dp))
             val actual = state.actualHeight.takeIf { it > 0 }?.let { "Playing at ${it}p" } ?: "Waiting for video"
-            ListItem(headlineContent = { Text("Auto · 1080p on Wi-Fi, 720p on mobile data") },
+            ListItem(content = { Text("Auto · 1080p on Wi-Fi, 720p on mobile data") },
                 supportingContent = { Text(if (state.manualQuality == null) actual else "Uses the network's resolution cap.") },
                 leadingContent = { RadioButton(state.manualQuality == null, onClick = null) },
                 modifier = Modifier.selectable(state.manualQuality == null, role = Role.RadioButton, onClick = { select(null) }))
             snackbar?.let { SnackbarHost(it, Modifier.padding(horizontal = 16.dp)) }
             state.qualities.forEach { height ->
-                ListItem(headlineContent = { Text("${height}p") },
+                ListItem(content = { Text("${height}p") },
                     supportingContent = if (state.manualQuality == height) ({ Text(actual) }) else null,
                     leadingContent = { RadioButton(state.manualQuality == height, onClick = null) },
                     modifier = Modifier.selectable(state.manualQuality == height, role = Role.RadioButton, onClick = { select(height) }))
@@ -47,14 +47,14 @@ internal fun CastSheet(cast: CastState, actions: CastActions, snackbar: Snackbar
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
             Text("Play on TV", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(20.dp))
             if (cast.scanning || cast.sending != null) Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                CircularProgressIndicator(Modifier.size(24.dp))
+                AppLoadingIndicator(Modifier.size(24.dp))
                 Text(cast.sending?.let { "Opening video on ${it.name}…" } ?: "Looking for TVs on this Wi-Fi…")
             }
             cast.tvs.forEach { tv ->
-                ListItem(headlineContent = { Text(tv.name) }, leadingContent = { Icon(Icons.Rounded.Tv, null) })
-                if (tv.appUrl != null) ListItem(headlineContent = { Text("YouTube app · HD, with ads") }, modifier = Modifier.padding(start = 24.dp)
+                ListItem(content = { Text(tv.name) }, leadingContent = { Icon(Icons.Rounded.Tv, null) })
+                if (tv.appUrl != null) ListItem(content = { Text("YouTube app · HD, with ads") }, modifier = Modifier.padding(start = 24.dp)
                     .clickable(enabled = !cast.scanning && cast.sending == null, role = Role.Button) { actions.play(tv, false) })
-                if (tv.renderer != null) ListItem(headlineContent = { Text("Direct from phone · HD, no ads · experimental") }, modifier = Modifier.padding(start = 24.dp)
+                if (tv.renderer != null) ListItem(content = { Text("Direct from phone · HD, no ads · experimental") }, modifier = Modifier.padding(start = 24.dp)
                     .clickable(enabled = !cast.scanning && cast.sending == null, role = Role.Button) { actions.play(tv, true) })
             }
             snackbar?.let { SnackbarHost(it, Modifier.padding(horizontal = 16.dp)) }
@@ -68,7 +68,7 @@ internal fun CastSheet(cast: CastState, actions: CastActions, snackbar: Snackbar
 @Composable
 internal fun DescriptionSheet(state: PlaybackState, engagement: EngagementState, subscribe: () -> Unit, refresh: () -> Unit, snackbar: SnackbarHostState?,
     dismiss: () -> Unit, quality: () -> Unit, settings: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = dismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)) {
+    ModalBottomSheet(onDismissRequest = dismiss, sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(state.video?.title ?: "Video details", style = MaterialTheme.typography.titleLarge)
             snackbar?.let { SnackbarHost(it) }
@@ -78,9 +78,7 @@ internal fun DescriptionSheet(state: PlaybackState, engagement: EngagementState,
                 Text(if (state.manualQuality == null) "Quality · Auto" else "Quality · ${state.manualQuality}p")
             }
             if (engagement.signedIn) Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = subscribe, enabled = !engagement.busy && engagement.info.channelId != null && engagement.info.subscribed != null) {
-                    Text(when (engagement.info.subscribed) { true -> "Unsubscribe"; false -> "Subscribe"; null -> "Subscription unavailable" })
-                }
+                SubscribeButton(engagement,subscribe)
                 TextButton(onClick = refresh, enabled = !engagement.busy) { Text("Refresh") }
             } else Text("Sign in to rate videos, subscribe and sync history.", style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = settings) { Text("Settings") }

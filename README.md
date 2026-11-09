@@ -23,7 +23,7 @@ YouTube session encrypted on the device. On the home screen the app is named
   experimental TV device-code flow, or a Netscape `cookies.txt` import. You
   then get Home, Subscriptions, History, Watch Later, Liked videos and
   Playlists, plus like, dislike and subscribe actions. Watch-history reporting
-  is optional.
+  is optional; successful history updates are silent.
 - **Comments and descriptions**, with optional dislike estimates from
   [Return YouTube Dislike](https://returnyoutubedislike.com/) (off by default).
 - **Play on TV**: launches the video in a TV's YouTube app through DIAL/Lounge,
@@ -31,9 +31,12 @@ YouTube session encrypted on the device. On the home screen the app is named
   renderer with no ads.
 - **Opens YouTube links**: shared and opened links for youtube.com and youtu.be,
   including timestamps.
-- **Material 3 interface**: System/Light/Dark themes, optional wallpaper
-  colours, predictive back, a bottom bar on phones and a navigation rail on
-  wider screens.
+- **Material 3 Expressive interface**: System/Light/Dark themes, optional
+  wallpaper colours, expressive controls and loading indicators, predictive
+  back, a bottom bar on phones and a navigation rail on wider screens. Ratings
+  and subscriptions update immediately, roll back on failure with Retry, and
+  offer Undo after unsubscribe. Signed-out rating buttons explain sign-in only
+  when tapped; the profile button opens Account directly.
 
 ## Privacy and security
 
@@ -71,6 +74,35 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 The release build is signed with the local debug key, so it installs over a
 debug build and keeps the signed-in session. Do not distribute it as is.
+
+Thumbnail images are warmed two cards ahead and one behind on unmetered Wi-Fi,
+through the existing image cache. This look-ahead stops on other networks and
+cancels obsolete requests when scrolling or leaving the list. Video buffering
+uses a white circular spinner; other loading indicators remain Expressive.
+
+The foreground app requests 120 Hz on supported displays, using an available
+fallback on other displays. To prevent low-brightness flicker when the panel
+switches to its idle rate, the app keeps redrawing while in the foreground—even
+on static pages. This uses more foreground idle GPU/battery power. Redraws and
+the refresh request stop in PiP and when paused. Global adaptive-refresh settings
+are unchanged; Android can still apply display, power-saving and thermal limits.
+
+### UI samples
+
+The isolated `samples` variant renders the production controls with synthetic
+state, without reading an account or making requests from its sample screen:
+
+```sh
+./gradlew assembleSamples
+adb install -r app/build/outputs/apk/samples/app-samples.apk
+adb shell am force-stop dev.quietube.samples
+adb shell am start -n dev.quietube.samples/dev.quietube.ui.ExpressiveSamplesActivity --ez dark true
+```
+
+It installs beside the normal app. Use `--ez dark false` for light samples.
+This variant and its sample activity are excluded from debug/release builds.
+For an offscreen image-cache check, add `--ez thumbnails true`; this mode requests
+one public YouTube thumbnail and shows whether it was cached before display.
 
 ### Tests
 

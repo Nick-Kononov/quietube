@@ -81,7 +81,7 @@ fun AccountScreen(session: SessionStatus, ui: AccountUiState, back: () -> Unit,
 
 @Composable
 private fun AccountAction(icon: ImageVector, title: String, body: String? = null, enabled: Boolean = true, action: () -> Unit, expanded: Boolean? = null) {
-    ListItem(headlineContent = { Text(title) }, supportingContent = body?.let { { Text(it) } }, leadingContent = { Icon(icon, null) },
+    ListItem(content = { Text(title) }, supportingContent = body?.let { { Text(it) } }, leadingContent = { Icon(icon, null) },
         trailingContent = expanded?.let { { Icon(if (it) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null) } },
         modifier = Modifier.clickable(enabled = enabled, role = Role.Button, onClick = action).semantics { expanded?.let { stateDescription = if (it) "Expanded" else "Collapsed" } })
 }

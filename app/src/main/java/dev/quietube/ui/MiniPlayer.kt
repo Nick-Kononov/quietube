@@ -34,7 +34,7 @@ internal fun MiniPlayer(state: PlaybackState, controller: MediaController?, expa
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                 } }, modifier = Modifier.fillMaxSize(), update = { it.player = controller }, onReset = null, onRelease = { it.player = null })
-                if (state.resolving || state.buffering) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                if (state.resolving || state.buffering) AppLoadingIndicator(Modifier.size(28.dp))
                 // The video view would otherwise swallow taps meant to expand the player.
                 Box(Modifier.matchParentSize().clickable(onClick = expand))
             }

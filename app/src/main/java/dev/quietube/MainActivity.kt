@@ -41,6 +41,7 @@ import dev.quietube.ui.*
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @javax.inject.Inject lateinit var thumbnails: ThumbnailPrefetcher
     @javax.inject.Inject lateinit var videos: dev.quietube.data.VideoRepository
     private var inPip by mutableStateOf(false)
     private var openPlayer by mutableStateOf(false)
@@ -50,6 +51,8 @@ class MainActivity : ComponentActivity() {
     private var playerBounds: Rect? = null
     private var appliedPip: Pair<Boolean, Rect?>? = null
     private var fullscreen = false
+    private var refreshResumed = false
+    private val smoothRefresh by lazy { SmoothRefreshRate(window) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -105,6 +108,10 @@ class MainActivity : ComponentActivity() {
                 val playing by playback.state.collectAsStateWithLifecycle()
                 val commentState by comments.state.collectAsStateWithLifecycle()
                 val engagementState by engagement.state.collectAsStateWithLifecycle()
+                val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+                LaunchedEffect(engagement) {
+                    engagement.acceptedChanges.collect { haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm) }
+                }
                 val controller by playback.controller.collectAsStateWithLifecycle()
                 val connectionError by playback.connectionError.collectAsStateWithLifecycle()
                 val castState by casting.state.collectAsStateWithLifecycle()
@@ -112,10 +119,11 @@ class MainActivity : ComponentActivity() {
                 var playerSheetVisible by remember { mutableStateOf(false) }
                 val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
                 ConsumeSnackbar(accountUi.message, snackbar, account::consumeMessage)
-                ConsumeSnackbar(engagementState.message, snackbar, engagement::consumeMessage)
+                ConsumeSnackbar(engagementState.message, snackbar, engagement::consumeMessage, engagementState.messageAction,
+                    engagementState.messageId.let { id -> { engagement.messageAction(id) } },eventKey = engagementState.messageId)
                 ConsumeSnackbar(playing.syncMessage, snackbar, playback::consumeMessage)
                 ConsumeSnackbar(castState.message, snackbar, casting::consumeMessage)
-                ConsumeSnackbar(linkError, snackbar) { linkError = null }
+                ConsumeSnackbar(linkError, snackbar, consume = { linkError = null })
                 // Local playback resuming means the phone is the player again.
                 LaunchedEffect(playing.isPlaying) { if (playing.isPlaying) casting.clearPlaying() }
                 // While the TV's YouTube app plays, seeking on the phone's (paused) player moves the TV too; direct streams seek through CastPlayer.
@@ -163,6 +171,7 @@ class MainActivity : ComponentActivity() {
                         launchSingleTop = true
                     }
                 }
+                LaunchedEffect(currentRoute) { videos.prefetch(emptyList()); thumbnails.submit(emptyList()) }
                 val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
                 SideEffect { updateFullscreen(playerVisible && landscape && !inPip) }
                 DisposableEffect(playerVisible) {
@@ -203,8 +212,9 @@ class MainActivity : ComponentActivity() {
                                     playlist = { if (nav.currentDestination?.route == route) feeds.open(it) },
                                     back = { if (shown.playlist != null) feeds.back() else nav.popBackStack() }, prefetch = { if (nav.currentDestination?.route == route) videos.prefetch(it) },
                                     pullRefresh = { if (nav.currentDestination?.route == route) feeds.pullRefresh() },
-                                    retry = { if (nav.currentDestination?.route == route) feeds.retry() }, profile = profile, settings = goSettings,
-                                    reselect = reselections[feedPageKey(route, shown.playlist?.id)] ?: 0, active = currentRoute == route && feed.feed == destination)
+                                    retry = { if (nav.currentDestination?.route == route) feeds.retry() }, profile = profile,
+                                    reselect = reselections[feedPageKey(route, shown.playlist?.id)] ?: 0, active = currentRoute == route && feed.feed == destination,
+                                    thumbnailPrefetch = { if (nav.currentDestination?.route == route) thumbnails.submit(it) })
                                 }
                             } }
                         }
@@ -213,7 +223,7 @@ class MainActivity : ComponentActivity() {
                             LibraryScreen(session.signedIn, profile,
                                 open = { destination -> feeds.select(destination); nav.navigate(feedRoute(destination)) { launchSingleTop = true } },
                                 search = { nav.navigate("search") { launchSingleTop = true } },
-                                account = { nav.navigate("account") { launchSingleTop = true } }, settings = goSettings, reselect = reselections["library"] ?: 0)
+                                account = { nav.navigate("account") { launchSingleTop = true } }, reselect = reselections["library"] ?: 0)
                             }
                         } }
                         composable("account") { entry -> ScreenCard(entry, preview) {
@@ -232,7 +242,8 @@ class MainActivity : ComponentActivity() {
                             val state by search.state.collectAsStateWithLifecycle()
                             val recent by search.recent.collectAsStateWithLifecycle()
                             SearchScreen(state, recent, search::edit, search::search, search::more, search::clearHistory, play,
-                                back = { nav.popBackStack() }, expandedChange = { searchExpanded = it }, prefetch = videos::prefetch)
+                                back = { nav.popBackStack() }, expandedChange = { searchExpanded = it }, prefetch = { if (nav.currentDestination?.route == "search") videos.prefetch(it) },
+                                thumbnailPrefetch = { if (nav.currentDestination?.route == "search") thumbnails.submit(it) })
                         } }
                         composable("player") { entry -> ScreenCard(entry, preview) {
                             PlayerScreen(playing, shownPlayer, connectionError, inPip,
@@ -244,7 +255,8 @@ class MainActivity : ComponentActivity() {
                                     else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                                 },
                                 bounds = { if (it != playerBounds) { playerBounds = Rect(it); updatePip(pipEligible) } },
-                                quality = playback::quality, play = playback::play, prefetch = videos::prefetch,
+                                quality = playback::quality, play = playback::play, prefetch = { if (nav.currentDestination?.route == "player") videos.prefetch(it) },
+                                active = currentRoute == "player",thumbnailPrefetch = { if (nav.currentDestination?.route == "player") thumbnails.submit(it) },
                                 cast = castState, castActions = castActions, snackbar = snackbar, sheetVisible = { playerSheetVisible = it })
                         } }
                     }
@@ -256,6 +268,23 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    override fun onResume() {
+        super.onResume()
+        refreshResumed = true
+        smoothRefresh.active(!inPip)
+    }
+
+    override fun onPause() {
+        refreshResumed = false
+        smoothRefresh.active(false)
+        super.onPause()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        smoothRefresh.active(refreshResumed && !inPip)
+    }
+
     private fun updateFullscreen(enabled: Boolean) {
         if (fullscreen == enabled) return
         fullscreen = enabled
@@ -276,6 +305,7 @@ class MainActivity : ComponentActivity() {
         super.onWindowFocusChanged(hasFocus)
         // Re-enter immersive playback after a dialog or another app returns focus.
         if (hasFocus && fullscreen) applySystemBars()
+        if (hasFocus) smoothRefresh.active(refreshResumed && !inPip)
     }
 
     private fun readIntent(value: Intent) {
@@ -322,5 +352,6 @@ class MainActivity : ComponentActivity() {
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         inPip = isInPictureInPictureMode
+        smoothRefresh.active(refreshResumed && !inPip)
     }
 }

@@ -138,5 +138,5 @@ fun QuietubeTheme(appearance: AppearanceSettings = AppearanceSettings(), content
     val scheme = if (useDynamicColor(appearance.wallpaper, Build.VERSION.SDK_INT) && Build.VERSION.SDK_INT >= 31) {
         if (dark) dynamicDarkColorScheme(LocalContext.current) else dynamicLightColorScheme(LocalContext.current)
     } else if (dark) BrandDark else BrandLight
-    MaterialTheme(colorScheme = scheme, typography = AppTypography, shapes = AppShapes, content = content)
+    MaterialExpressiveTheme(colorScheme = scheme, motionScheme = MotionScheme.expressive(), typography = AppTypography, shapes = AppShapes, content = content)
 }
