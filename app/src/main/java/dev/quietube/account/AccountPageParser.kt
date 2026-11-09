@@ -10,6 +10,9 @@ class ParsedAccountPage(val videos: List<Video>, val playlists: List<PlaylistSum
 object AccountPageParser {
     private val videoId = Regex("[A-Za-z0-9_-]{11}")
     private val playlistId = Regex("[A-Za-z0-9_-]{2,150}")
+    private val countText = Regex("([0-9]+(?:[.,][0-9]+)?)\\s*([KMB])?", RegexOption.IGNORE_CASE)
+    private val adKeys = setOf("adSlotRenderer", "promotedSparklesWebRenderer", "displayAdRenderer", "promotedVideoRenderer", "playerAds", "adPlacements")
+    private val playlistLockups = setOf("LOCKUP_CONTENT_TYPE_PLAYLIST", "LOCKUP_CONTENT_TYPE_PODCAST")
     fun parse(root: JsonObject): ParsedAccountPage {
         val tabs = root.obj("contents")?.obj("twoColumnBrowseResultsRenderer")?.arr("tabs")
         val selected = tabs?.mapNotNull { (it as? JsonObject)?.obj("tabRenderer") }
@@ -26,14 +29,14 @@ object AccountPageParser {
             when (element) {
                 is JsonArray -> element.forEach { queue.add(it to depth + 1) }
                 is JsonObject -> element.forEach { (key, child) ->
-                    if (key in setOf("adSlotRenderer", "promotedSparklesWebRenderer", "displayAdRenderer", "promotedVideoRenderer", "playerAds", "adPlacements")) return@forEach
+                    if (key in adKeys) return@forEach
                     val renderer = child as? JsonObject
                     try {
                         when (key) {
                             "tileRenderer" -> {
                                 if (renderer != null) {
                                     val command = renderer.obj("onSelectCommand")
-                                    // TV history lists Shorts with reelWatchEndpoint; they are ordinary watch URLs too.
+                                    // TV lists Shorts with reelWatchEndpoint; they are ordinary watch URLs, flagged so feeds can hide them.
                                     val id = (command?.obj("watchEndpoint") ?: command?.obj("reelWatchEndpoint"))?.str("videoId")
                                     val meta = renderer.obj("metadata")?.obj("tileMetadataRenderer")
                                     val header = renderer.obj("header")?.obj("tileHeaderRenderer")
@@ -49,7 +52,8 @@ object AccountPageParser {
                                             thumbnail(header?.get("thumbnail")),seconds,count(lines.firstOrNull { it.contains("view",true) }),
                                             lines.firstOrNull { it.contains("ago",true) },
                                             objects(header,"style").any { (it as? JsonPrimitive)?.content?.contains("LIVE") == true },
-                                            percent?.let { if (seconds > 0) seconds*1000*it/100 else null }))
+                                            percent?.let { if (seconds > 0) seconds*1000*it/100 else null },
+                                            isShort = isShort(renderer)))
                                     } else {
                                         // TV library tiles open playlists by browsing "VL<id>" rather than watching.
                                         val playlist = command?.obj("watchEndpoint")?.str("playlistId") ?: command?.obj("watchPlaylistEndpoint")?.str("playlistId")
@@ -88,8 +92,9 @@ object AccountPageParser {
                                         videos.putIfAbsent(watchUrl(id), Video(watchUrl(id), title, parts.firstOrNull().orEmpty(),
                                             thumbnail(renderer["contentImage"]), seconds, count(parts.firstOrNull { it.contains("view", true) }),
                                             parts.firstOrNull { it.contains("ago", true) || it.contains("streamed", true) }, live,
-                                            resumePositionMs = percent?.let { if (seconds > 0) seconds * 1000 * it / 100 else null }))
-                                    } else if (type in setOf("LOCKUP_CONTENT_TYPE_PLAYLIST", "LOCKUP_CONTENT_TYPE_PODCAST") && id != null && playlistId.matches(id) && title.isNotBlank()) {
+                                            resumePositionMs = percent?.let { if (seconds > 0) seconds * 1000 * it / 100 else null },
+                                            isShort = isShort(renderer)))
+                                    } else if (type in playlistLockups && id != null && playlistId.matches(id) && title.isNotBlank()) {
                                         playlists.putIfAbsent(id, PlaylistSummary(id, title, thumbnail(renderer["contentImage"]), null))
                                     } else if (type == "LOCKUP_CONTENT_TYPE_VIDEO") skipped = true
                                 }
@@ -119,7 +124,21 @@ object AccountPageParser {
             thumbnail(renderer["thumbnail"]), seconds, count(text(renderer["viewCountText"] ?: renderer["shortViewCountText"])),
             text(renderer["publishedTimeText"]).takeIf { it.isNotBlank() },
             objects(renderer, "style").any { (it as? JsonPrimitive)?.content?.contains("LIVE") == true },
-            percent?.let { if (seconds > 0) seconds * 1000 * it / 100 else null })
+            percent?.let { if (seconds > 0) seconds * 1000 * it / 100 else null }, isShort = isShort(renderer))
+    }
+    /** Shorts open through reelWatchEndpoint or a /shorts/ URL, or carry the SHORTS overlay style; one walk checks all three. */
+    private fun isShort(renderer: JsonObject): Boolean {
+        fun walk(e: JsonElement?, depth: Int): Boolean = depth <= 30 && when (e) {
+            is JsonArray -> e.any { walk(it, depth + 1) }
+            is JsonObject -> e.any { (key, value) -> when (key) {
+                "reelWatchEndpoint" -> true
+                "url" -> (value as? JsonPrimitive)?.contentOrNull?.startsWith("/shorts/") == true
+                "style" -> (value as? JsonPrimitive)?.contentOrNull == "SHORTS"
+                else -> walk(value, depth + 1)
+            } }
+            else -> false
+        }
+        return walk(renderer, 0)
     }
     private fun legacyPlaylist(renderer: JsonObject): PlaylistSummary? {
         val id = renderer.str("playlistId")?.takeIf(playlistId::matches) ?: return null
@@ -166,8 +185,7 @@ object AccountPageParser {
         return parts.fold(0L) { result, part -> result * 60 + part.toLong() }.coerceAtMost(31_536_000)
     }
     private fun count(value: String?): Long {
-        val match = Regex("([0-9]+(?:[.,][0-9]+)?)\\s*([KMB])?", RegexOption.IGNORE_CASE)
-            .find(value?.replace(",", "").orEmpty()) ?: return -1
+        val match = countText.find(value?.replace(",", "").orEmpty()) ?: return -1
         val multiplier = when (match.groupValues[2].uppercase()) { "K" -> 1_000; "M" -> 1_000_000; "B" -> 1_000_000_000; else -> 1 }
         return (match.groupValues[1].toDouble() * multiplier).toLong()
     }

@@ -15,6 +15,8 @@ data class ResumePosition(@PrimaryKey val videoUrl: String, val positionMs: Long
 interface ResumeDao {
     @Query("SELECT positionMs FROM resume_positions WHERE videoUrl = :url")
     suspend fun position(url: String): Long?
+    @Query("SELECT * FROM resume_positions WHERE videoUrl IN (:urls)")
+    suspend fun positions(urls: List<String>): List<ResumePosition>
     @Query("DELETE FROM resume_positions") suspend fun clear()
     @Upsert suspend fun save(position: ResumePosition)
     @Query("DELETE FROM resume_positions WHERE videoUrl NOT IN (SELECT videoUrl FROM resume_positions ORDER BY updatedAt DESC LIMIT 1000)")
@@ -31,3 +33,10 @@ object ResumeModule {
 
 internal fun resumablePosition(position: Long, duration: Long): Long =
     if (position < 0 || (duration > 0 && position >= duration - 5_000)) 0 else position
+
+internal fun playbackStart(explicit: Long?, saved: Long, durationSeconds: Long, live: Boolean): Long {
+    if (live) return 0
+    val duration = if (durationSeconds > 0) durationSeconds.coerceAtMost(Long.MAX_VALUE / 1000) * 1000 else 0
+    return if (explicit != null) explicit.coerceIn(0, duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
+    else resumablePosition(saved, duration)
+}

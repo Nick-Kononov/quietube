@@ -3,6 +3,7 @@ package dev.quietube.data
 enum class Rating { Like, Dislike, None }
 data class Engagement(val rating: Rating? = null,val likes: String? = null,val dislikes: String? = null,
     val channelId: String? = null,val subscribed: Boolean? = null,val estimatedDislikes: Boolean = false)
+data class Profile(val name: String,val avatarUrl: String?)
 interface WatchTicket
 interface AccountActions {
     suspend fun engagement(url: String): Outcome<Engagement> = Outcome.Failure(VideoError.AuthExpired)

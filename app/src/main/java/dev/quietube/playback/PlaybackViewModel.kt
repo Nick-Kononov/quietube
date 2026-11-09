@@ -16,11 +16,12 @@ import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 @HiltViewModel
-class PlaybackViewModel @Inject constructor(@ApplicationContext context: Context, store: PlaybackStateStore) : ViewModel() {
+class PlaybackViewModel @Inject constructor(@ApplicationContext context: Context, private val store: PlaybackStateStore) : ViewModel() {
     val state = store.state
     private val mutableController = MutableStateFlow<MediaController?>(null)
     val controller = mutableController.asStateFlow()
@@ -40,7 +41,12 @@ class PlaybackViewModel @Inject constructor(@ApplicationContext context: Context
             }
         }, ContextCompat.getMainExecutor(context))
     }
-    fun play(url: String) { command(PlaybackService.PLAY_VIDEO, Bundle().apply { putString("url", url) }) }
+    fun play(url: String) { command(PlaybackService.PLAY_VIDEO, Bundle().apply {
+        val canonical = dev.quietube.links.parseYouTubeLink(url)
+        putString("url", canonical?.substringBefore("&t=") ?: url)
+        canonical?.let { dev.quietube.links.linkStartMs(it) }?.let { putLong("start_ms", it) }
+    }) }
+    fun consumeMessage(message: String) { store.mutable.update { if (it.syncMessage == message) it.copy(syncMessage = null) else it } }
     fun quality(height: Int?) { command(PlaybackService.SET_QUALITY, Bundle().apply { putInt("height", height ?: 0) }) }
     private fun command(action: String, args: Bundle) {
         viewModelScope.launch {

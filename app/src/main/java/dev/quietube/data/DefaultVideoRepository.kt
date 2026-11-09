@@ -10,6 +10,7 @@ class DefaultVideoRepository @Inject constructor(
     private val anonymous: AnonymousSource,
     private val account: AccountSource,
     private val sessions: EncryptedSessionStore,
+    private val positions: dev.quietube.playback.ResumeDao,
     private val playbackCache: PlaybackPrefetcher,
 ) : VideoRepository {
     override suspend fun comments(url: String,continuation: Continuation?) = anonymous.comments(url,continuation)
@@ -18,25 +19,44 @@ class DefaultVideoRepository @Inject constructor(
     override suspend fun subscribe(channelId: String,subscribe: Boolean) = account.subscribe(channelId,subscribe)
     override suspend fun startWatch(url: String,position: Double) = account.startWatch(url,position)
     override suspend fun reportWatch(ticket: WatchTicket,segments: List<Pair<Double,Double>>,position: Double,final: Boolean) = account.reportWatch(ticket,segments,position,final)
-    private val local = java.util.concurrent.ConcurrentHashMap<String, Video>()
-    override suspend fun playback(url: String): Outcome<PlaybackDetails> = playbackCache.get(url)
+    /** Most recent search results first; the oldest fall out past 100 instead of the feed emptying. */
+    private val local = object : LinkedHashMap<String, Video>() {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Video>) = size > 100
+    }
+    override suspend fun playback(url: String): Outcome<PlaybackDetails> = when (val result = playbackCache.get(url)) {
+        is Outcome.Success -> Outcome.Success(result.value.copy(related = withProgress(result.value.related)))
+        is Outcome.Failure -> result
+    }
+    private suspend fun withProgress(videos: List<Video>): List<Video> {
+        val saved = videos.map { it.url }.chunked(500).flatMap { positions.positions(it) }.associate { it.videoUrl to it.positionMs }
+        return videos.map { withWatchProgress(it, saved[it.url]) }
+    }
+    private suspend fun withProgress(result: Outcome<VideoPage>): Outcome<VideoPage> = when (result) {
+        is Outcome.Success -> Outcome.Success(result.value.copy(videos = withProgress(result.value.videos)))
+        is Outcome.Failure -> result
+    }
     override fun invalidatePlayback(url: String) = playbackCache.invalidate(url)
     override fun prefetch(urls: List<String>) = playbackCache.visible(urls)
     override fun invalidateFeeds() = account.invalidateFeeds()
     override suspend fun search(query: String, continuation: Continuation?): Outcome<VideoPage> {
         val result = anonymous.search(query.trim(), continuation)
-        if (result is Outcome.Success) { result.value.videos.take(30).forEach { local[it.url] = it }; if (local.size > 100) local.clear() }
-        return result
+        if (result is Outcome.Success) synchronized(local) {
+            result.value.videos.filterNot(Video::isShort).take(30).forEach { local.remove(it.url); local[it.url] = it }
+        }
+        return withProgress(result)
     }
     override suspend fun feed(feed: AccountFeed, continuation: Continuation?): Outcome<VideoPage> {
         sessions.initialize()
-        if (sessions.status.value.signedIn) return account.feed(feed, continuation)
-        return if (feed == AccountFeed.Home) Outcome.Success(VideoPage(local.values.toList())) else Outcome.Failure(VideoError.AuthExpired)
+        if (sessions.status.value.signedIn) return withProgress(account.feed(feed, continuation))
+        return if (feed == AccountFeed.Home) withProgress(Outcome.Success(VideoPage(synchronized(local) { local.values.reversed() }))) else Outcome.Failure(VideoError.AuthExpired)
     }
     override suspend fun playlist(id: String, continuation: Continuation?): Outcome<VideoPage> {
         sessions.initialize()
-        return if (sessions.status.value.signedIn) account.playlist(id, continuation) else anonymous.playlist(id, continuation)
+        return withProgress(if (sessions.status.value.signedIn) account.playlist(id, continuation) else anonymous.playlist(id, continuation))
     }
     override fun resumePosition(url: String): Long? = if (sessions.status.value.signedIn) account.resumePosition(url) else null
-    fun clearLocalFeed() { local.clear() }
+    fun clearLocalFeed() = synchronized(local) { local.clear() }
 }
+
+internal fun withWatchProgress(video: Video, localPosition: Long?): Video =
+    if (localPosition == null) video else video.copy(resumePositionMs = localPosition)

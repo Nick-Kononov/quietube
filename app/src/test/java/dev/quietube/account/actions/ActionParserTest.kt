@@ -14,6 +14,14 @@ class ActionParserTest {
         assertEquals(true,info.subscribed); assertNull(info.dislikes)
         assertEquals("UCabcdefghijklmnopqrstuv",info.channelId)
     }
+    @Test fun profileUsesTheSelectedAccountAndItsLargestPhoto() {
+        val response = Json.parseToJsonElement("""{"responseContext":{},"contents":[{"accountSectionListRenderer":{"contents":[{"accountItemSectionRenderer":{"contents":[
+            {"accountItem":{"accountName":{"simpleText":"Brand"},"accountPhoto":{"thumbnails":[{"url":"https://yt3.ggpht.com/brand","width":88}]},"isSelected":false}},
+            {"accountItem":{"accountName":{"simpleText":"Owner"},"isSelected":true,"accountPhoto":{"thumbnails":[
+                {"url":"https://yt3.ggpht.com/small","width":48},{"url":"https://yt3.ggpht.com/large","width":176},{"url":"http://insecure","width":999}]}}}
+        ]}}]}}]}""").jsonObject
+        assertEquals(dev.quietube.data.Profile("Owner","https://yt3.ggpht.com/large"),ActionParser.profile(response))
+    }
     @Test fun tvTransportLikeCountDoesNotNeedAnActionEndpoint() {
         val next = Json.parseToJsonElement("""{"transportControlsRenderer":{"likeButton":{"toggleButtonRenderer":{"defaultText":{"simpleText":"12.3K"}}}}}""").jsonObject
         assertEquals("12.3K",ActionParser.engagement(fixture("player"),next).likes)

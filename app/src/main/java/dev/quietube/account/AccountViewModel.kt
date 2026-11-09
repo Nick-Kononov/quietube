@@ -8,14 +8,20 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.quietube.data.DefaultVideoRepository
 import dev.quietube.data.Outcome
+import dev.quietube.data.Profile
 import dev.quietube.playback.ResumeDao
 import javax.inject.Inject
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.stateIn
 
 data class AccountUiState(val busy: Boolean = false,val message: String? = null,
-    val deviceLogin: dev.quietube.account.oauth.DeviceLogin? = null)
+    val deviceLogin: dev.quietube.account.oauth.DeviceLogin? = null, val signingIn: Boolean = false)
 @HiltViewModel
 class AccountViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -25,23 +31,42 @@ class AccountViewModel @Inject constructor(
     private val source: InnerTubeAccountSource,
     private val repository: DefaultVideoRepository,
     private val positions: ResumeDao,
+    private val searchHistory: dev.quietube.ui.SearchHistory,
+    private val appearancePreferences: dev.quietube.ui.AppearancePreferences,
+    private val actions: dev.quietube.account.actions.YouTubeActions,
 ) : ViewModel() {
+    val appearance = appearancePreferences.settings.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, null)
+    fun themeMode(mode: dev.quietube.ui.ThemeMode) { viewModelScope.launch { appearancePreferences.mode(mode) } }
+    fun wallpaper(enabled: Boolean) { viewModelScope.launch { appearancePreferences.wallpaper(enabled) } }
     val session = sessions.status
     private val mutable = MutableStateFlow(AccountUiState())
     val ui = mutable.asStateFlow()
+    private val profileState = MutableStateFlow<Profile?>(null)
+    /** Name and avatar of the signed-in account; null while signed out or not yet loaded. */
+    val profile = profileState.asStateFlow()
+    fun consumeMessage(message: String) { mutable.update { if (it.message == message) it.copy(message = null) else it } }
     private var operation: Job? = null
-    init { viewModelScope.launch { sessions.initialize() } }
+    private var deviceJob: Job? = null
+    init {
+        viewModelScope.launch { sessions.initialize() }
+        viewModelScope.launch {
+            sessions.status.filter { it.ready }.distinctUntilChanged { a, b -> a.revision == b.revision && a.signedIn == b.signedIn }.collectLatest {
+                profileState.value = null
+                if (it.signedIn) (actions.profile() as? Outcome.Success)?.let { result -> profileState.value = result.value }
+            }
+        }
+    }
     fun beginDeviceLogin() {
         if (mutable.value.busy) return
         operation?.cancel()
         operation = viewModelScope.launch {
-            mutable.value = AccountUiState(true,"Requesting a device code…")
+            mutable.value = AccountUiState(true,"Requesting a device code…",signingIn = true)
             var stage = "requesting a device code"
             try {
                 sessions.initialize()
                 val expectedRevision = sessions.status.value.revision
                 val login = tv.start()
-                mutable.value = AccountUiState(true,"Approve the code in Chrome, then return here. Google may call this YouTube on TV.",login)
+                mutable.value = AccountUiState(true,"Approve the code in Chrome, then return here. Google may call this YouTube on TV.",login,signingIn = true)
                 stage = "waiting for approval"
                 var interval = login.intervalSeconds
                 var failures = 0
@@ -60,19 +85,21 @@ class AccountViewModel @Inject constructor(
                         dev.quietube.account.oauth.DevicePoll.Denied -> { mutable.value = AccountUiState(message = "Authorization was declined. No account session was saved."); return@launch }
                         dev.quietube.account.oauth.DevicePoll.Expired -> { mutable.value = AccountUiState(message = "The device code expired. Request a new code."); return@launch }
                         is dev.quietube.account.oauth.DevicePoll.Granted -> {
-                            mutable.value = AccountUiState(true,"Google approved. Testing authenticated Home…")
+                            mutable.value = AccountUiState(true,"Google approved. Testing authenticated Home…",signingIn = true)
                             stage = "checking authenticated Home"
-                            val home = AccountPageParser.parse(tv.probe(response.session))
+                            val probe = tv.probe(response.session)
+                            val home = withContext(Dispatchers.Default) { AccountPageParser.parse(probe) }
                             if (home.videos.isEmpty()) {
                                 mutable.value = AccountUiState(message = "Google approved sign-in, but the prototype could not read a nonempty Home feed. No replacement session was saved.")
                                 return@launch
                             }
                             stage = "checking token refresh"
-                            mutable.value = AccountUiState(true,"Home is readable. Checking automatic token refresh…")
+                            mutable.value = AccountUiState(true,"Home is readable. Checking automatic token refresh…",signingIn = true)
                             delay(1000)
                             val refreshed = tv.refreshCandidate(response.session)
                             delay(1000)
-                            if (AccountPageParser.parse(tv.probe(refreshed)).videos.isEmpty()) {
+                            val refreshedProbe = tv.probe(refreshed)
+                            if (withContext(Dispatchers.Default) { AccountPageParser.parse(refreshedProbe) }.videos.isEmpty()) {
                                 mutable.value = AccountUiState(message = "The refreshed token could not read Home. No replacement session was saved.")
                                 return@launch
                             }
@@ -90,9 +117,12 @@ class AccountViewModel @Inject constructor(
             catch (e: AccountFailure) { mutable.value = AccountUiState(message = "Device sign-in failed while $stage (${e.error}). Cookie import remains available.") }
             catch (_: Exception) { mutable.value = AccountUiState(message = "Device sign-in did not complete. YouTube may have changed or rejected the TV client flow. Cookie import remains available.") }
         }
+        deviceJob = operation
     }
     fun cancelDeviceLogin() {
-        operation?.cancel(); tv.cancelNetwork()
+        // Only device sign-in is cancellable: stopping sign-out halfway would leave caches and progress behind.
+        val job = deviceJob?.takeIf { it.isActive } ?: return
+        job.cancel(); tv.cancelNetwork()
         mutable.value = AccountUiState(message = "Device sign-in cancelled. No replacement session was saved.")
     }
     fun importFile(uri: Uri) {
@@ -136,15 +166,14 @@ class AccountViewModel @Inject constructor(
         }
     }
     fun loginResult(success: Boolean) {
-        viewModelScope.launch {
-            mutable.value = AccountUiState(message = if (success) "Signed in. Your feeds are ready." else "Sign-in was cancelled. If Google blocks the browser, import cookies.txt instead.")
-        }
+        mutable.value = AccountUiState(message = if (success) "Signed in. Your feeds are ready." else "Sign-in was cancelled. If Google blocks the browser, import cookies.txt instead.")
     }
     fun signOut() {
         operation?.cancel()
         operation = viewModelScope.launch {
             mutable.value = AccountUiState(true)
-            try {
+            // Cleanup must not stop halfway, even if the screen goes away mid sign-out.
+            try { withContext(NonCancellable) {
                 tv.cancelNetwork()
                 sessions.clear()
                 client.clear(); source.clear(); repository.clearLocalFeed()
@@ -154,8 +183,9 @@ class AccountViewModel @Inject constructor(
                     coil3.SingletonImageLoader.get(context).diskCache?.clear()
                 }
                 clearLoginData(context)
+                searchHistory.clear()
                 mutable.value = AccountUiState(message = "Signed out. Session, personal feeds and saved progress cleared.")
-            } catch (_: Exception) { mutable.value = AccountUiState(message = "Sign-out cleanup could not finish. Try again.") }
+            } } catch (_: Exception) { mutable.value = AccountUiState(message = "Sign-out cleanup could not finish. Try again.") }
         }
     }
 }

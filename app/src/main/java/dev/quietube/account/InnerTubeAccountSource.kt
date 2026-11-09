@@ -29,9 +29,21 @@ class InnerTubeAccountSource @Inject constructor(private val client: InnerTubeCl
         }
         if (feed == AccountFeed.Playlists && (continuation as? AccountCursor)?.browseId == "FElibrary")
             return page("FElibrary", continuation)
+        if (feed == AccountFeed.Home || feed == AccountFeed.History) return withoutShorts(id, continuation)
         val result = page(id, continuation)
         return if (feed == AccountFeed.Playlists && continuation == null && result is Outcome.Failure && result.error == VideoError.ContentUnavailable)
             page("FElibrary", null) else result
+    }
+    /** Home and History hide Shorts; a page of only Shorts moves on so paging doesn't stall. */
+    private suspend fun withoutShorts(id: String, continuation: Continuation?): Outcome<VideoPage> {
+        var result = page(id, continuation)
+        for (attempt in 1..5) {
+            val value = (result as? Outcome.Success)?.value ?: return result
+            val kept = value.copy(videos = value.videos.filterNot(Video::isShort))
+            if (kept.videos.isNotEmpty() || kept.playlists.isNotEmpty() || kept.continuation == null || attempt == 5) return Outcome.Success(kept)
+            result = page(id, kept.continuation)
+        }
+        return result
     }
     override suspend fun playlist(id: String, continuation: Continuation?): Outcome<VideoPage> = page("VL$id", continuation)
     override fun resumePosition(url: String): Long? = progress[url]

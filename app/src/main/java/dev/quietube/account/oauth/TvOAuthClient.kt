@@ -6,6 +6,8 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dev.quietube.account.EncryptedSessionStore
 import dev.quietube.account.AccountFailure
+import dev.quietube.account.InnerTubeClient
+import dev.quietube.account.await
 import dev.quietube.data.VideoError
 import javax.inject.Inject
 import javax.inject.Qualifier
@@ -30,13 +32,14 @@ object TvNetworkModule {
         .addInterceptor { chain ->
             val request = chain.request(); val u = request.url
             if (!allowedTvDestination(u.scheme,u.host,u.encodedPath) || request.header("Cookie") != null ||
-                (request.header("Authorization") != null && !u.encodedPath.startsWith("/youtubei/v1/")))
+                (request.header("Authorization") != null && !u.encodedPath.startsWith("/youtubei/v1/") && u.encodedPath !in STATS_PATHS))
                 throw IOException("TV account destination blocked.")
             chain.proceed(request)
         }.build()
 }
 internal fun allowedTvDestination(scheme: String,host: String,path: String): Boolean = scheme == "https" && host == "www.youtube.com" &&
-    (path == "/tv" || path.startsWith("/s/") || path in setOf("/o/oauth2/device/code","/o/oauth2/token") || path.startsWith("/youtubei/v1/"))
+    (path == "/tv" || path.startsWith("/s/") || path in setOf("/o/oauth2/device/code","/o/oauth2/token") || path.startsWith("/youtubei/v1/") || path in STATS_PATHS)
+internal val STATS_PATHS = setOf("/api/stats/playback","/api/stats/watchtime")
 
 @Singleton
 class TvOAuthClient @Inject constructor(@TvHttp private val http: OkHttpClient,private val sessions: EncryptedSessionStore) {
@@ -71,7 +74,27 @@ class TvOAuthClient @Inject constructor(@TvHttp private val http: OkHttpClient,p
         val id = if (browseId == "FEwhat_to_watch") "default" else browseId
         return request("browse",buildJsonObject { if (continuation != null) put("continuation",continuation) else put("browseId",id ?: "default") })
     }
+    /** Watch-history pings only count toward the account's history when they carry its bearer token. */
+    suspend fun track(url: HttpUrl): Unit = withContext(Dispatchers.IO) {
+        val (session,revision) = browseMutex.withLock { currentSession() }
+        val request = Request.Builder().url(url.newBuilder().host("www.youtube.com").build()).header("User-Agent",USER_AGENT)
+            .header("Authorization","Bearer ${session.accessToken}").build()
+        execute(request,false)
+        if (sessions.status.value.revision != revision) throw AccountFailure(VideoError.AuthExpired)
+    }
     suspend fun request(endpoint: String,payload: JsonObject): JsonObject = withContext(Dispatchers.IO) { browseMutex.withLock {
+        val (session,revision) = currentSession()
+        delay((1000-(android.os.SystemClock.elapsedRealtime()-lastBrowse)).coerceAtLeast(0))
+        currentCoroutineContext().ensureActive()
+        if (sessions.status.value.revision != revision) throw AccountFailure(VideoError.AuthExpired)
+        lastBrowse = android.os.SystemClock.elapsedRealtime()
+        val result = requestApi(endpoint,payload,session)
+        currentCoroutineContext().ensureActive()
+        if (sessions.status.value.revision != revision) throw AccountFailure(VideoError.AuthExpired)
+        result
+    } }
+    /** Refreshes an expiring token and the client version; call with browseMutex held. */
+    private suspend fun currentSession(): Pair<DeviceSession,Long> {
         val snapshot = sessions.deviceSnapshot() ?: throw AccountFailure(VideoError.AuthExpired)
         var session = snapshot.session
         if (session.expiresAt <= System.currentTimeMillis()+60_000) {
@@ -83,22 +106,17 @@ class TvOAuthClient @Inject constructor(@TvHttp private val http: OkHttpClient,p
             try {
                 val fresh = TvConfigurationParser.refresh(get("$ORIGIN/tv"),session.configuration)
                 contextVersion = fresh.version; contextVisitor = fresh.visitor; contextAt = now
-            } catch (e: IOException) { contextAt = now-6*60*60*1000L+5*60*1000L }
+            } catch (e: CancellationException) { throw e }
+            // Network or a changed /tv page: keep the stored configuration and retry discovery in five minutes.
+            catch (_: Exception) { contextAt = now-6*60*60*1000L+5*60*1000L }
         }
         if (contextVersion != null && (session.configuration.version != contextVersion || session.configuration.visitor != contextVisitor)) {
             session = DeviceSession(session.accessToken,session.refreshToken,session.expiresAt,
                 TvClientConfiguration(session.configuration.clientId,session.configuration.clientSecret,contextVersion!!,contextVisitor!!))
             if (!sessions.refreshDeviceIfRevision(session,snapshot.revision)) throw AccountFailure(VideoError.AuthExpired)
         }
-        delay((1000-(android.os.SystemClock.elapsedRealtime()-lastBrowse)).coerceAtLeast(0))
-        currentCoroutineContext().ensureActive()
-        if (sessions.status.value.revision != snapshot.revision) throw AccountFailure(VideoError.AuthExpired)
-        lastBrowse = android.os.SystemClock.elapsedRealtime()
-        val result = requestApi(endpoint,payload,session)
-        currentCoroutineContext().ensureActive()
-        if (sessions.status.value.revision != snapshot.revision) throw AccountFailure(VideoError.AuthExpired)
-        result
-    } }
+        return session to snapshot.revision
+    }
     suspend fun refreshCandidate(session: DeviceSession): DeviceSession = withContext(Dispatchers.IO) {
         val result = post("/o/oauth2/token",buildJsonObject {
             put("client_id",session.configuration.clientId); put("client_secret",session.configuration.clientSecret)
@@ -112,7 +130,7 @@ class TvOAuthClient @Inject constructor(@TvHttp private val http: OkHttpClient,p
         return requestApi("browse",buildJsonObject { if (continuation != null) put("continuation",continuation) else put("browseId",id ?: "default") },session)
     }
     private suspend fun requestApi(endpoint: String,payload: JsonObject,session: DeviceSession): JsonObject {
-        require(endpoint in setOf("browse","next","player","like/like","like/dislike","like/removelike","like/removedislike","subscription/subscribe","subscription/unsubscribe"))
+        require(endpoint in InnerTubeClient.ENDPOINTS)
         val body = buildJsonObject {
             payload.forEach { (key,value) -> put(key,value) }
             put("context",buildJsonObject {
@@ -142,7 +160,7 @@ class TvOAuthClient @Inject constructor(@TvHttp private val http: OkHttpClient,p
         }
         return oauthJson.parseToJsonElement(execute(builder.post(body.toString().toRequestBody("application/json".toMediaType())).build(),allowOAuthError)).jsonObject
     }
-    private suspend fun execute(request: Request,allowOAuthError: Boolean): String = http.newCall(request).execute().use { response ->
+    private suspend fun execute(request: Request,allowOAuthError: Boolean): String = http.newCall(request).await().use { response ->
         currentCoroutineContext().ensureActive()
         if (!response.isSuccessful && !(allowOAuthError && response.code in setOf(400,403,428))) throw AccountFailure(when(response.code) {
             401,403 -> VideoError.AuthExpired; 429 -> VideoError.RateLimited; else -> VideoError.Network

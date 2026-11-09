@@ -19,6 +19,7 @@ data class PlaybackState(
     val actualHeight: Int = 0,
     val related: List<Video> = emptyList(),
     val error: VideoError? = null,
+    val description: String? = null,
     val syncMessage: String? = null,
 )
 @Singleton

@@ -1,0 +1,4 @@
+<!-- Alpha cutout traced from art/logo.svg; 60dp silhouette within the 72dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M54.5,51.6L45.6,46.2L44.5,46.2L44.0,71.3L48.6,68.9L67.2,59.4L66.4,58.3L54.5,51.6zM83.5,74.0L83.2,75.6L80.8,79.7L77.8,82.1L73.7,83.7L36.7,84.0L33.2,83.5L29.7,81.8L27.0,79.4L25.1,76.4L24.0,69.9L24.8,66.4L27.2,62.4L30.2,59.9L35.4,58.3L32.1,55.6L30.5,52.1L30.2,47.5L31.8,42.9L32.9,41.0L37.0,37.5L44.8,35.4L48.9,33.2L52.4,29.1L53.7,24.0L59.7,25.6L62.9,28.6L64.5,31.8L65.1,35.6L64.0,40.2L67.0,39.9L72.1,41.6L74.5,43.5L77.0,47.2L77.5,54.0L75.1,58.9L78.9,60.8L82.1,64.3L83.7,68.6L83.5,74.0z"/>
+</vector>

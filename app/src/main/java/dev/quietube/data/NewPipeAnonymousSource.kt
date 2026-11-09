@@ -115,7 +115,7 @@ class NewPipeAnonymousSource @Inject constructor(private val downloader: Extract
                 } catch (_: Exception) { null }
             }.distinctBy { it.url }
             val details = PlaybackDetails(video, videos, audio, info.hlsUrl?.takeIf { it.isNotBlank() },
-                info.dashMpdUrl?.takeIf { it.isNotBlank() }, related)
+                info.dashMpdUrl?.takeIf { it.isNotBlank() }, related, videoDescription(info.description))
             if (StreamSelector.select(details, 1080) == null) Outcome.Failure(VideoError.ContentUnavailable)
             else Outcome.Success(details)
         } catch (e: CancellationException) { throw e }
@@ -155,7 +155,8 @@ class NewPipeAnonymousSource @Inject constructor(private val downloader: Extract
                     else Video(item.url, item.name, item.uploaderName.orEmpty(),
                         item.thumbnails.maxByOrNull { it.height }?.url,
                         item.duration, item.viewCount, item.textualUploadDate,
-                        item.streamType == StreamType.LIVE_STREAM || item.streamType == StreamType.AUDIO_LIVE_STREAM)
+                        item.streamType == StreamType.LIVE_STREAM || item.streamType == StreamType.AUDIO_LIVE_STREAM,
+                        isShort = item.isShortFormContent)
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     skipped = true

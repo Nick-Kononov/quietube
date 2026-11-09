@@ -8,6 +8,9 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
+import androidx.compose.material.icons.automirrored.rounded.Comment
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -36,7 +39,7 @@ internal fun PlayerCommunity(comments: CommentsState,more: () -> Unit,refresh: (
         HorizontalPager(state = pager,modifier = Modifier.weight(1f).fillMaxWidth(),verticalAlignment = Alignment.Top) { page ->
             if (page == 0) CommentList(comments,more,refresh,pullRefresh)
             else LazyColumn(Modifier.fillMaxSize(),state = relatedList,contentPadding = PaddingValues(vertical = 16.dp),verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                if (related.isEmpty()) item { Text("No related videos available.",modifier = Modifier.padding(20.dp)) }
+                if (related.isEmpty()) item { StatusMessage(Icons.Rounded.VideoLibrary, "No related videos available.") }
                 items(related,key = { it.url }) { video -> VideoCard(video) { play(video.url) } }
             }
         }
@@ -50,13 +53,14 @@ private fun CommentList(state: CommentsState,more: () -> Unit,refresh: () -> Uni
     LazyColumn(Modifier.fillMaxSize(),contentPadding = PaddingValues(horizontal = 20.dp,vertical = 12.dp),verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { Text("Top comments",style = MaterialTheme.typography.labelMedium) }
         if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-        if (state.disabled) item { Text("Comments are turned off for this video.") }
-        else if (!state.loading && state.error == null && state.comments.isEmpty()) item { Text("No comments yet.") }
+        if (state.disabled) item { StatusMessage(Icons.Rounded.CommentsDisabled, "Comments are turned off", "For this video.") }
+        else if (!state.loading && state.error == null && state.comments.isEmpty()) item { StatusMessage(Icons.AutoMirrored.Rounded.Comment, "No comments yet.") }
         items(state.comments,key = { it.id }) { comment -> CommentCard(comment) }
         if (state.partial) item { Text("Some comments could not be loaded.",style = MaterialTheme.typography.bodySmall) }
         state.error?.let { error -> item {
-            Text(error.message(),color = MaterialTheme.colorScheme.error)
-            TextButton(onClick = { if (state.comments.isEmpty()) refresh() else more() }) { Text("Retry comments") }
+            StatusMessage(Icons.Rounded.CloudOff, "Comments unavailable", error.message(), "Retry comments") {
+                if (state.comments.isEmpty()) refresh() else more()
+            }
         } }
         if (state.loadingMore) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         else if (state.hasMore && state.error == null) item { OutlinedButton(onClick = more,modifier = Modifier.fillMaxWidth()) { Text("Load more comments") } }

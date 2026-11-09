@@ -13,8 +13,9 @@ private class Ticket(val url: HttpUrl,val cpn: String,val revision: Long) : Watc
     override fun toString() = "WatchTicket([redacted])"
 }
 @Singleton
-class YouTubeActions @Inject constructor(private val client: InnerTubeClient,private val sessions: EncryptedSessionStore) : AccountActions {
-    // Signed tracking URLs already identify the account. No Cookie or Authorization header is sent.
+class YouTubeActions @Inject constructor(private val client: InnerTubeClient,private val sessions: EncryptedSessionStore,
+    private val tv: dev.quietube.account.oauth.TvOAuthClient) : AccountActions {
+    // Cookie sessions send tracking pings without credentials; device-code sessions attach the bearer token (TvOAuthClient.track).
     private val trackingHttp = OkHttpClient.Builder().cookieJar(CookieJar.NO_COOKIES).followRedirects(false).followSslRedirects(false)
         .callTimeout(20,java.util.concurrent.TimeUnit.SECONDS).build()
     private suspend fun <T> guarded(block: suspend (Long) -> T): Outcome<T> = withContext(Dispatchers.IO) {
@@ -32,6 +33,10 @@ class YouTubeActions @Inject constructor(private val client: InnerTubeClient,pri
         val player = client.request("player",payload)
         val next = client.request("next",payload)
         ActionParser.engagement(player,next)
+    }
+    suspend fun profile() = guarded {
+        val json = client.request("account/accounts_list",buildJsonObject { })
+        ActionParser.profile(json)
     }
     override suspend fun rate(url: String,rating: Rating,previous: Rating) = guarded {
         val action = when(rating) { Rating.Like -> "like"; Rating.Dislike -> "dislike"; Rating.None -> if (previous == Rating.Dislike) "removedislike" else "removelike" }
@@ -61,6 +66,7 @@ class YouTubeActions @Inject constructor(private val client: InnerTubeClient,pri
     private suspend fun ping(url: HttpUrl,revision: Long) {
         currentCoroutineContext().ensureActive()
         if (sessions.status.value.revision != revision) throw AccountFailure(VideoError.AuthExpired)
+        if (sessions.status.value.method == SessionMethod.DeviceCode) return tv.track(url)
         trackingHttp.newCall(Request.Builder().url(url).header("User-Agent",dev.quietube.account.oauth.TvOAuthClient.USER_AGENT).build()).execute().use {
             if (!it.isSuccessful) throw AccountFailure(if (it.code == 429) VideoError.RateLimited else VideoError.Network)
         }

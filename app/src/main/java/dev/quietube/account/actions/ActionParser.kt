@@ -25,6 +25,15 @@ object ActionParser {
         require(response.objects().none { it.s("status") in setOf("STATUS_FAILED","ERROR","FAILED") ||
             it.o("alertRenderer")?.s("type") == "ERROR" }) { "Action rejected" }
     }
+    /** The signed-in (selected) account from account/accounts_list; brand accounts are listed alongside it. */
+    fun profile(response: JsonObject): Profile {
+        val accounts = response.objects().filter { it["accountName"] != null && it["accountPhoto"] != null }.toList()
+        val account = accounts.firstOrNull { (it["isSelected"] as? JsonPrimitive)?.booleanOrNull == true } ?: accounts.firstOrNull()
+            ?: error("Account unavailable")
+        val photo = account.o("accountPhoto")?.objects()?.filter { it.s("url")?.startsWith("https://") == true }
+            ?.maxByOrNull { (it["width"] as? JsonPrimitive)?.intOrNull ?: 0 }?.s("url")
+        return Profile(account["accountName"].label().orEmpty(),photo)
+    }
     fun videoId(url: String): String {
         val id = url.toHttpUrlOrNull()?.queryParameter("v") ?: ""
         require(Regex("[A-Za-z0-9_-]{11}").matches(id)); return id

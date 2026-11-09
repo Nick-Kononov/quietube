@@ -56,6 +56,10 @@ class DeviceCodeTest {
         assertFalse(allowedTvDestination("https","googlevideo.com","/youtubei/v1/browse"))
         assertFalse(allowedTvDestination("https","www.youtube.com","/watch"))
         assertFalse(allowedTvDestination("http","www.youtube.com","/o/oauth2/token"))
+        // Watch-history pings carry the bearer so YouTube credits the account.
+        assertTrue(allowedTvDestination("https","www.youtube.com","/api/stats/watchtime"))
+        assertFalse(allowedTvDestination("https","s.youtube.com","/api/stats/watchtime"))
+        assertFalse(allowedTvDestination("https","www.youtube.com","/api/stats/qoe"))
     }
     @Test fun `TV tiles parse video metadata progress and continuation and skip navigation tiles`() {
         val text = javaClass.classLoader!!.getResourceAsStream("account/oauth/tv-tile.json")!!.bufferedReader().use { it.readText() }

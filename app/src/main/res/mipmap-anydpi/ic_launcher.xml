@@ -1,0 +1,7 @@
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The logo's own red: launcher masks of any shape stay filled to the edge. -->
+    <background android:drawable="@color/ic_launcher_background"/>
+    <!-- art/logo.svg with the poop cutout filled white; the circle spans the 72dp visible area. -->
+    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome"/>
+</adaptive-icon>

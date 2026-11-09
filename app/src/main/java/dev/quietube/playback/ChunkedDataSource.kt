@@ -29,7 +29,8 @@ class ChunkedDataSource(
 
     override fun open(dataSpec: DataSpec): Long {
         val end = chunkedEnd(dataSpec.position, dataSpec.length, contentLength(dataSpec.uri))
-        // Small streams (often audio) need a bounded range too: the throttle applies to any open-ended request.
+        // Unknown size (manifests, live segments): pass through. Known sizes, small audio included, are always
+        // bounded because YouTube throttles any open-ended request.
         if (end == null) {
             chunking = false
             return upstream.open(dataSpec)

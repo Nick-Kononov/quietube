@@ -12,6 +12,7 @@ data class Video(
     val isLive: Boolean = false,
     val resumePositionMs: Long? = null,
     val likeCount: Long? = null,
+    val isShort: Boolean = false,
 )
 
 interface Continuation

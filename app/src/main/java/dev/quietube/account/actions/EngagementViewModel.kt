@@ -17,6 +17,7 @@ class EngagementViewModel @Inject constructor(private val repository: VideoRepos
     playback: PlaybackStateStore,private val preferences: SyncPreferences,private val estimates: DislikeEstimates) : ViewModel() {
     private val mutable = MutableStateFlow(EngagementState())
     val state = mutable.asStateFlow()
+    fun consumeMessage(message: String) { mutable.update { if (it.message == message) it.copy(message = null) else it } }
     private var action: Job? = null
     init {
         viewModelScope.launch {
@@ -35,11 +36,11 @@ class EngagementViewModel @Inject constructor(private val repository: VideoRepos
                 }
         }
     }
-    fun refresh() {
+    fun refresh(clearMessage: Boolean = true) {
         val current = mutable.value
         if (!current.signedIn || current.busy || current.url == null) return
         action = viewModelScope.launch {
-            mutable.update { it.copy(busy = true,message = null) }
+            mutable.update { it.copy(busy = true,message = if (clearMessage) null else it.message) }
             when(val result = repository.engagement(current.url)) {
                 is Outcome.Success -> mutable.update { it.copy(busy = false,info = result.value.copy(dislikes = if (current.info.estimatedDislikes) current.info.dislikes else result.value.dislikes,estimatedDislikes = current.info.estimatedDislikes)) }
                 is Outcome.Failure -> mutable.update { it.copy(busy = false,message = "Could not refresh account details (${result.error}).") }
@@ -53,7 +54,7 @@ class EngagementViewModel @Inject constructor(private val repository: VideoRepos
         action = viewModelScope.launch {
             mutable.update { it.copy(busy = true,message = null) }
             when(val result = repository.rate(current.url,target,current.info.rating ?: Rating.None)) {
-                is Outcome.Success -> { mutable.update { it.copy(busy = false,info = it.info.copy(rating = target),message = "Rating saved to YouTube.") }; refresh() }
+                is Outcome.Success -> { mutable.update { it.copy(busy = false,info = it.info.copy(rating = target),message = "Rating saved to YouTube.") }; refresh(clearMessage = false) }
                 is Outcome.Failure -> mutable.update { it.copy(busy = false,message = "Rating was not confirmed (${result.error}). Refresh before trying again.") }
             }
         }

@@ -1,0 +1,8 @@
+<resources><style name="Theme.Quietube" parent="android:style/Theme.Material.Light.NoActionBar">
+    <item name="android:fontFamily">sans</item>
+    <item name="android:windowLightStatusBar">true</item>
+    <item name="android:windowLightNavigationBar">true</item>
+    <item name="android:windowBackground">#FFF8F7</item>
+    <item name="android:windowSplashScreenBackground">#FFF8F7</item>
+    <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+</style></resources>

@@ -35,7 +35,25 @@ class AccountParserTest {
         """).jsonObject)
         assertEquals("https://www.youtube.com/watch?v=abcdefghijk",page.videos.single().url)
         assertEquals(45L,page.videos.single().durationSeconds)
+        assertTrue(page.videos.single().isShort)
         assertEquals("history-next",page.token)
+    }
+    @Test fun `web shorts are flagged and ordinary videos are not`() {
+        val page = AccountPageParser.parse(accountJson.parseToJsonElement("""
+            {"contents":[
+              {"videoRenderer":{"videoId":"aaaaaaaaaaa","title":{"simpleText":"Legacy short"},
+                "navigationEndpoint":{"commandMetadata":{"webCommandMetadata":{"url":"/shorts/aaaaaaaaaaa"}},"reelWatchEndpoint":{"videoId":"aaaaaaaaaaa"}}}},
+              {"videoRenderer":{"videoId":"bbbbbbbbbbb","title":{"simpleText":"Overlay short"},
+                "thumbnailOverlays":[{"thumbnailOverlayTimeStatusRenderer":{"text":{"simpleText":"0:30"},"style":"SHORTS"}}]}},
+              {"lockupViewModel":{"contentId":"ccccccccccc","contentType":"LOCKUP_CONTENT_TYPE_VIDEO",
+                "metadata":{"lockupMetadataViewModel":{"title":{"content":"Lockup short"}}},
+                "rendererContext":{"commandContext":{"onTap":{"innertubeCommand":{"reelWatchEndpoint":{"videoId":"ccccccccccc"}}}}}}},
+              {"lockupViewModel":{"contentId":"ddddddddddd","contentType":"LOCKUP_CONTENT_TYPE_VIDEO",
+                "metadata":{"lockupMetadataViewModel":{"title":{"content":"Regular video"}}},
+                "rendererContext":{"commandContext":{"onTap":{"innertubeCommand":{"commandMetadata":{"webCommandMetadata":{"url":"/watch?v=ddddddddddd"}},
+                  "watchEndpoint":{"videoId":"ddddddddddd"}}}}}}}]}
+        """).jsonObject)
+        assertEquals(listOf(true,true,true,false),page.videos.map { it.isShort })
     }
     @Test fun `tv continuation page reads continuationContents rather than the stub contents`() {
         val page = AccountPageParser.parse(accountJson.parseToJsonElement("""

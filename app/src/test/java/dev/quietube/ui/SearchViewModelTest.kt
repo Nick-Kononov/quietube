@@ -28,7 +28,7 @@ class SearchViewModelTest {
                 return Outcome.Success(VideoPage(listOf(video(query))))
             }
         }
-        val vm = SearchViewModel(repo, SavedStateHandle())
+        val vm = SearchViewModel(repo, SavedStateHandle(), FakeRecentSearches())
         vm.search("old")
         runCurrent()
         vm.search("new")
@@ -51,7 +51,7 @@ class SearchViewModelTest {
                 return Outcome.Success(VideoPage(listOf(video("one"), video("two"))))
             }
         }
-        val vm = SearchViewModel(repo, SavedStateHandle())
+        val vm = SearchViewModel(repo, SavedStateHandle(), FakeRecentSearches())
         vm.search("kotlin"); advanceUntilIdle()
         vm.more(); advanceUntilIdle()
         assertEquals(1, vm.state.value.videos.size)
@@ -72,10 +72,40 @@ class SearchViewModelTest {
                 return Outcome.Success(VideoPage(emptyList()))
             }
         }
-        val vm = SearchViewModel(repo, SavedStateHandle(mapOf("query" to "saved")))
+        val vm = SearchViewModel(repo, SavedStateHandle(mapOf("query" to "saved")), FakeRecentSearches())
         advanceUntilIdle()
         assertEquals("saved", vm.state.value.query)
         vm.search("   "); advanceUntilIdle()
         assertEquals(1, calls)
     }
+    @Test fun `search records history but a restored query does not resurrect cleared history`() = runTest(dispatcher) {
+        val history = FakeRecentSearches()
+        val repo = emptyRepository()
+        val saved = SavedStateHandle()
+        val vm = SearchViewModel(repo, saved, history)
+        vm.search("  Kotlin  "); advanceUntilIdle()
+        assertEquals(listOf("Kotlin"), history.queries.value)
+        vm.clearHistory(); advanceUntilIdle()
+        assertTrue(history.queries.value.isEmpty())
+        SearchViewModel(repo, SavedStateHandle(mapOf("query" to "Kotlin")), history)
+        advanceUntilIdle()
+        assertTrue(history.queries.value.isEmpty())
+    }
+    @Test fun `unsubmitted draft survives restoration without a network request`() = runTest(dispatcher) {
+        val saved = SavedStateHandle()
+        val vm = SearchViewModel(emptyRepository(), saved, FakeRecentSearches())
+        vm.edit("a draft")
+        assertEquals("a draft", saved.get<String>("draft"))
+        val restored = SearchViewModel(emptyRepository(), SavedStateHandle(mapOf("draft" to "a draft")), FakeRecentSearches())
+        advanceUntilIdle()
+        assertEquals("a draft", restored.state.value.draft)
+        assertFalse(restored.state.value.searched)
+    }
+    private fun emptyRepository() = object : VideoRepository {
+        override suspend fun feed(feed: AccountFeed, continuation: Continuation?): Outcome<VideoPage> = error("Not used")
+        override suspend fun playlist(id: String, continuation: Continuation?): Outcome<VideoPage> = error("Not used")
+        override suspend fun playback(url: String): Outcome<PlaybackDetails> = error("Not used")
+        override suspend fun search(query: String, continuation: Continuation?): Outcome<VideoPage> = Outcome.Success(VideoPage(emptyList()))
+    }
+
 }

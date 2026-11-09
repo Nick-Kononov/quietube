@@ -11,9 +11,12 @@ import kotlinx.coroutines.channels.Channel
 
 @Singleton
 class NetworkStatus @Inject constructor(@ApplicationContext private val context: Context) {
-    fun onWifi(): Boolean {
+    /** Wi-Fi that isn't metered: a phone hotspot is Wi-Fi but spends the user's mobile data. */
+    fun onUnmeteredWifi(): Boolean {
         val manager = context.getSystemService(ConnectivityManager::class.java)
-        return manager.getNetworkCapabilities(manager.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        val capabilities = manager.getNetworkCapabilities(manager.activeNetwork) ?: return false
+        return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
     }
 }
 
@@ -27,9 +30,9 @@ class PlaybackPrefetcher(
     private val source: AnonymousSource,
     private val prefetchAllowed: () -> Boolean,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-    private val clock: () -> Long = System::currentTimeMillis,
+    private val clock: () -> Long = android.os.SystemClock::elapsedRealtime,
 ) {
-    @Inject constructor(source: AnonymousSource, network: NetworkStatus) : this(source, network::onWifi)
+    @Inject constructor(source: AnonymousSource, network: NetworkStatus) : this(source, network::onUnmeteredWifi)
 
     private class Entry(val result: Deferred<Outcome<PlaybackDetails>>, val createdAt: Long)
     private val lock = Any()
@@ -64,8 +67,9 @@ class PlaybackPrefetcher(
 
     private suspend fun work() {
         while (true) {
+            val allowed = prefetchAllowed()
             val next = synchronized(lock) {
-                if (!prefetchAllowed() || clock() < pausedUntil) { wanted.clear(); null }
+                if (!allowed || clock() < pausedUntil) { wanted.clear(); null }
                 else generateSequence { wanted.removeFirstOrNull() }.firstOrNull { freshLocked(it) == null }
                     ?.let { url -> url to startLocked(url).also { if (wanted.isNotEmpty()) wake.trySend(Unit) } }
             }

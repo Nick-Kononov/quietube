@@ -11,9 +11,19 @@ android {
         applicationId = "dev.quietube"
         minSdk = 26
         targetSdk = 37
-        versionCode = 13
-        versionName = "0.5.2"
+        versionCode = 15
+        versionName = "0.5.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    buildTypes {
+        // Optimised build for daily use: Compose and the extractor run far faster without debug instrumentation.
+        // Signed with the debug key so it installs over a debug build in place, keeping the signed-in session.
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
     buildFeatures { compose = true }
     compileOptions {
@@ -21,6 +31,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
         isCoreLibraryDesugaringEnabled = true
     }
+    // Hilt's @ApplicationContext/@Inject on constructor properties: keep today's target, silence the migration warning.
+    kotlin { compilerOptions { freeCompilerArgs.add("-Xannotation-default-target=param-property") } }
     packaging { resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*") }
 }
 dependencies {
@@ -28,10 +40,12 @@ dependencies {
     implementation(composeBom)
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material3:material3-adaptive-navigation-suite")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
-    implementation("androidx.navigation:navigation-compose:2.9.3")
+    implementation("androidx.navigation:navigation-compose:2.10.2")
+    implementation("androidx.navigationevent:navigationevent-compose:1.1.2") // Observes the back gesture for the Settings-style preview.
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
@@ -40,8 +54,8 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.3.0")
     implementation("com.google.dagger:hilt-android:2.60.1")
     ksp("com.google.dagger:hilt-compiler:2.60.1")
-    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
-    implementation("org.jsoup:jsoup:1.22.2") // Same version already used by NewPipe; plain comment text from HTML.
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.27.0")
+    implementation("org.jsoup:jsoup:1.23.2") // Same version already used by NewPipe; plain comment text from HTML.
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("androidx.datastore:datastore-preferences:1.1.7")

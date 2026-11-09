@@ -11,6 +11,8 @@ import dev.quietube.data.VideoError
 import dev.quietube.data.VideoRepository
 import javax.inject.Inject
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -33,22 +35,31 @@ data class SearchState(
 class SearchViewModel @Inject constructor(
     private val repository: VideoRepository,
     private val savedState: SavedStateHandle,
+    private val history: RecentSearches,
 ) : ViewModel() {
-    private val mutableState = MutableStateFlow(SearchState(draft = savedState["query"] ?: ""))
+    private val mutableState = MutableStateFlow(SearchState(draft = savedState["draft"] ?: savedState["query"] ?: ""))
     val state = mutableState.asStateFlow()
+    val recent = history.queries.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    fun clearHistory() { viewModelScope.launch { history.clear() } }
     private var cursor: Continuation? = null
     private var request: Job? = null
-    init { if (mutableState.value.draft.isNotBlank()) search() }
+    init {
+        val draft = mutableState.value.draft
+        savedState.get<String>("query")?.takeIf(String::isNotBlank)?.let { performSearch(it, record = false); edit(draft) }
+    }
 
-    fun edit(value: String) { mutableState.update { it.copy(draft = value) } }
-    fun search(value: String = mutableState.value.draft) {
+    fun edit(value: String) { val draft = value.take(500); savedState["draft"] = draft; mutableState.update { it.copy(draft = draft) } }
+    fun search(value: String = mutableState.value.draft) = performSearch(value, record = true)
+    private fun performSearch(value: String, record: Boolean) {
         val query = value.trim().take(500)
         if (query.isEmpty()) return
         request?.cancel()
         cursor = null
         savedState["query"] = query
+        savedState["draft"] = query
         mutableState.value = SearchState(draft = query, query = query, loading = true, searched = true)
         request = viewModelScope.launch {
+            if (record) history.add(query)
             when (val result = repository.search(query)) {
                 is Outcome.Success -> {
                     cursor = result.value.continuation
