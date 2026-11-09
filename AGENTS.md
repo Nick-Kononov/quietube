@@ -113,3 +113,47 @@ These are product requirements, not preferences. Do not weaken them.
   `app/build.gradle.kts` for user-visible releases.
 - YouTube changes often. When a parser breaks, add a sanitized fixture that
   reproduces it before you fix it.
+
+## Releasing
+
+Releases are GitHub releases on `main`, each with the release APK attached.
+Publishing is outward-facing: only cut a release when the owner asks for one.
+`gh release create` creates the tag, so don't tag by hand.
+
+1. **Bump the version** with the changes, usually in their PR: increase
+   `versionCode` by 1 and set `versionName` (for example `0.5.8`) in
+   `app/build.gradle.kts`. The tag is `v` + `versionName`.
+2. **Merge to `main`**, then pick the exact commit to release:
+   `git fetch origin && git rev-parse origin/main`.
+3. **Build from that commit in a clean checkout.** If the working tree is dirty
+   or on another branch, use a temporary worktree under `.tools/` rather than
+   stashing or switching branches:
+   ```sh
+   SHA=$(git rev-parse origin/main)
+   git worktree add --detach .tools/release "$SHA" && cp local.properties .tools/release/
+   (cd .tools/release && ./gradlew testDebugUnitTest assembleRelease)
+   cp .tools/release/app/build/outputs/apk/release/app-release.apk .tools/quietube-0.5.8.apk
+   ```
+   Check that `versionName` in that checkout matches the tag you're about to
+   create.
+4. **Write the notes** in a file under `.tools/`: user-visible changes since the
+   last release, the minimum Android version (8.0, API 26), the APK's SHA-256
+   (`shasum -a 256`), and a note that it is signed with a debug key.
+5. **Publish**, targeting the exact SHA, not the branch name:
+   ```sh
+   gh release create v0.5.8 .tools/quietube-0.5.8.apk --target "$SHA" \
+     --title "Quietube 0.5.8" --notes-file .tools/release-notes-0.5.8.md
+   ```
+6. **Verify and clean up:** run `gh release view v0.5.8` (asset present, not a
+   draft), then `git fetch --tags`, then `git worktree remove .tools/release`.
+   Report the release URL.
+
+Rules:
+- Never move, delete or re-use a published tag. To fix a bad release, bump the
+  version and publish a new one. Re-upload an asset (`gh release upload
+  --clobber`) only if it was built from the tagged commit.
+- Release builds are signed with the local debug key, and Android only installs
+  updates signed with the same key. Don't change signing without the owner.
+  Never commit a keystore.
+- Only release from `main`. If an old version needs a fix while `main` has
+  unreleased work, ask before creating a `release/X.Y` branch from its tag.
