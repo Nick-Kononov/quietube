@@ -20,13 +20,13 @@ internal fun StatusMessage(icon: ImageVector, title: String, body: String? = nul
 }
 
 @Composable
-internal fun ConsumeSnackbar(message: String?, host: SnackbarHostState, consume: (String) -> Unit) {
+internal fun ConsumeSnackbar(message: String?, host: SnackbarHostState, consume: (String) -> Unit, actionLabel: String? = null, action: (() -> Unit)? = null,eventKey: Any? = message) {
     val scope = rememberCoroutineScope()
-    LaunchedEffect(message) {
+    LaunchedEffect(message,eventKey) {
         message?.let {
             consume(it)
             // The queued display must outlive the state acknowledgement that clears the effect key.
-            scope.launch { host.showSnackbar(it) }
+            scope.launch { if (host.showSnackbar(it,actionLabel = actionLabel,withDismissAction = actionLabel != null) == SnackbarResult.ActionPerformed) action?.invoke() }
         }
     }
 }

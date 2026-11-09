@@ -31,9 +31,11 @@ YouTube session encrypted on the device. On the home screen the app is named
   renderer with no ads.
 - **Opens YouTube links**: shared and opened links for youtube.com and youtu.be,
   including timestamps.
-- **Material 3 interface**: System/Light/Dark themes, optional wallpaper
-  colours, predictive back, a bottom bar on phones and a navigation rail on
-  wider screens.
+- **Material 3 Expressive interface**: System/Light/Dark themes, optional
+  wallpaper colours, expressive controls and loading indicators, predictive
+  back, a bottom bar on phones and a navigation rail on wider screens. Ratings
+  and subscriptions update immediately, roll back on failure with Retry, and
+  offer Undo after unsubscribe.
 
 ## Privacy and security
 
@@ -71,6 +73,21 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 The release build is signed with the local debug key, so it installs over a
 debug build and keeps the signed-in session. Do not distribute it as is.
+
+### UI samples
+
+The isolated `samples` variant renders the production controls with synthetic
+state, without reading an account or making requests from its sample screen:
+
+```sh
+./gradlew assembleSamples
+adb install -r app/build/outputs/apk/samples/app-samples.apk
+adb shell am force-stop dev.quietube.samples
+adb shell am start -n dev.quietube.samples/dev.quietube.ui.ExpressiveSamplesActivity --ez dark true
+```
+
+It installs beside the normal app. Use `--ez dark false` for light samples.
+This variant and its sample activity are excluded from debug/release builds.
 
 ### Tests
 

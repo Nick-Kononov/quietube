@@ -1,6 +1,5 @@
 package dev.quietube.ui
 
-import android.animation.ValueAnimator
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
@@ -20,15 +19,7 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 internal fun VideoCardPlaceholder() {
-    val context = LocalContext.current
-    var animate by remember { mutableStateOf(ValueAnimator.areAnimatorsEnabled()) }
-    DisposableEffect(context) {
-        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) { animate = ValueAnimator.areAnimatorsEnabled() }
-        }
-        context.contentResolver.registerContentObserver(Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, observer)
-        onDispose { context.contentResolver.unregisterContentObserver(observer) }
-    }
+    val animate = rememberAnimationsEnabled()
     val offset = if (animate) {
         val transition = rememberInfiniteTransition(label = "Loading")
         val value by transition.animateFloat(-600f, 1200f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "Shimmer")
@@ -42,4 +33,18 @@ internal fun VideoCardPlaceholder() {
         Spacer(Modifier.height(12.dp))
         Box(Modifier.fillMaxWidth(.75f).height(16.dp).background(brush, MaterialTheme.shapes.extraSmall))
     }
+}
+
+@Composable
+internal fun rememberAnimationsEnabled(): Boolean {
+    val context = LocalContext.current
+    var animate by remember { mutableStateOf(Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f) }
+    DisposableEffect(context) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) { animate = Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f }
+        }
+        context.contentResolver.registerContentObserver(Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, observer)
+        onDispose { context.contentResolver.unregisterContentObserver(observer) }
+    }
+    return animate
 }

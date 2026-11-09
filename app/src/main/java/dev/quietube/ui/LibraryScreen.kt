@@ -33,7 +33,7 @@ internal fun LibraryScreen(signedIn: Boolean, profile: Profile?, open: (AccountF
             StatusMessage(Icons.Rounded.VideoLibrary, "Your library", "Sign in to see your history, saved videos and playlists.", "Sign in", account)
         } else LazyColumn(Modifier.fillMaxSize().padding(insets), state = list) {
             libraryFeeds.forEach { feed -> item(key = feed.name) {
-                ListItem(headlineContent = { Text(feed.label()) }, leadingContent = { Icon(when (feed) {
+                ListItem(content = { Text(feed.label()) }, leadingContent = { Icon(when (feed) {
                     AccountFeed.History -> Icons.Rounded.History
                     AccountFeed.WatchLater -> Icons.Rounded.WatchLater
                     AccountFeed.Liked -> Icons.Rounded.ThumbUp

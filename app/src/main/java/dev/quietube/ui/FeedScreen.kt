@@ -80,7 +80,7 @@ fun FeedScreen(state: FeedState, session: SessionStatus,
                 StatusMessage(Icons.Rounded.AccountCircle, state.feed.label(), "Sign in to see your ${state.feed.label().lowercase()}.", "Sign in", account)
                 return@Column
             }
-            androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = pullRefresh, modifier = Modifier.fillMaxSize()) {
+            RefreshBox(refreshing = state.refreshing, refresh = pullRefresh, modifier = Modifier.fillMaxSize()) {
             if (restoring) Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) { repeat(3) { VideoCardPlaceholder() } }
             else LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 if ((!state.initialized || state.loading) && state.videos.isEmpty() && state.playlists.isEmpty()) items(3) { VideoCardPlaceholder() }
@@ -89,7 +89,7 @@ fun FeedScreen(state: FeedState, session: SessionStatus,
                         modifier = Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 items(state.playlists, key = { "playlist:${it.id}" }, contentType = { "playlist" }) { item ->
-                    ListItem(headlineContent = { Text(item.title) }, supportingContent = { Text(item.countText ?: "Playlist") },
+                    ListItem(content = { Text(item.title) }, supportingContent = { Text(item.countText ?: "Playlist") },
                         leadingContent = { AsyncImage(item.thumbnailUrl, null, Modifier.width(120.dp).aspectRatio(16f / 9f).clip(MaterialTheme.shapes.small), contentScale = ContentScale.Crop) },
                         modifier = Modifier.clickable(role = androidx.compose.ui.semantics.Role.Button) { playlist(item) })
                 }
@@ -104,7 +104,7 @@ fun FeedScreen(state: FeedState, session: SessionStatus,
                 if (state.partial) item { Text("Some items could not be read and were skipped.", Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.bodySmall) }
                 if (state.hasMore) item {
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        if (state.loadingMore) CircularProgressIndicator(Modifier.size(28.dp))
+                        if (state.loadingMore) AppLoadingIndicator(Modifier.size(28.dp))
                         else OutlinedButton(onClick = more) { Text("Load more") }
                     }
                 }

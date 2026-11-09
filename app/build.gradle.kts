@@ -11,11 +11,16 @@ android {
         applicationId = "dev.quietube"
         minSdk = 26
         targetSdk = 37
-        versionCode = 15
-        versionName = "0.5.4"
+        versionCode = 16
+        versionName = "0.5.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
+        create("samples") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".samples"
+            matchingFallbacks += listOf("debug")
+        }
         // Optimised build for daily use: Compose and the extractor run far faster without debug instrumentation.
         // Signed with the debug key so it installs over a debug build in place, keeping the signed-in session.
         release {
@@ -36,10 +41,10 @@ android {
     packaging { resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*") }
 }
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2025.08.01")
+    val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
     implementation("androidx.activity:activity-compose:1.10.1")
-    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material3:material3:1.5.0-rc01")
     implementation("androidx.compose.material3:material3-adaptive-navigation-suite")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui-tooling-preview")

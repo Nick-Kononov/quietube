@@ -105,6 +105,10 @@ class MainActivity : ComponentActivity() {
                 val playing by playback.state.collectAsStateWithLifecycle()
                 val commentState by comments.state.collectAsStateWithLifecycle()
                 val engagementState by engagement.state.collectAsStateWithLifecycle()
+                val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+                LaunchedEffect(engagement) {
+                    engagement.acceptedChanges.collect { haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm) }
+                }
                 val controller by playback.controller.collectAsStateWithLifecycle()
                 val connectionError by playback.connectionError.collectAsStateWithLifecycle()
                 val castState by casting.state.collectAsStateWithLifecycle()
@@ -112,10 +116,11 @@ class MainActivity : ComponentActivity() {
                 var playerSheetVisible by remember { mutableStateOf(false) }
                 val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
                 ConsumeSnackbar(accountUi.message, snackbar, account::consumeMessage)
-                ConsumeSnackbar(engagementState.message, snackbar, engagement::consumeMessage)
+                ConsumeSnackbar(engagementState.message, snackbar, engagement::consumeMessage, engagementState.messageAction,
+                    engagementState.messageId.let { id -> { engagement.messageAction(id) } },eventKey = engagementState.messageId)
                 ConsumeSnackbar(playing.syncMessage, snackbar, playback::consumeMessage)
                 ConsumeSnackbar(castState.message, snackbar, casting::consumeMessage)
-                ConsumeSnackbar(linkError, snackbar) { linkError = null }
+                ConsumeSnackbar(linkError, snackbar, consume = { linkError = null })
                 // Local playback resuming means the phone is the player again.
                 LaunchedEffect(playing.isPlaying) { if (playing.isPlaying) casting.clearPlaying() }
                 // While the TV's YouTube app plays, seeking on the phone's (paused) player moves the TV too; direct streams seek through CastPlayer.

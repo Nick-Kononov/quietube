@@ -91,7 +91,7 @@ fun PlayerScreen(state: PlaybackState, player: androidx.media3.common.Player?, c
                 it.useController = !inPip
                 it.keepScreenOn = state.isPlaying && !inPip
             }, onReset = null, onRelease = { it.player = null })
-            if (state.resolving || state.buffering) CircularProgressIndicator()
+            if (state.resolving || state.buffering) AppLoadingIndicator(contained = true)
             // Shown and hidden with the player's own controls, like YouTube's overlay.
             if (!inPip) androidx.compose.animation.AnimatedVisibility(controlsVisible, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) {
                 CompositionLocalProvider(LocalContentColor provides OverlayWhite) {
@@ -151,22 +151,3 @@ private const val LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
 
 class CastActions(val open: () -> Unit, val denied: () -> Unit, val scan: () -> Unit, val dismiss: () -> Unit,
     val play: (Tv, Boolean) -> Unit, val stop: () -> Unit)
-
-/** Always visible under the title; rating needs a signed-in session, counts show either way. */
-@Composable
-private fun RatingButtons(engagement: EngagementState,publicLikes: Long?,rate: (Rating) -> Unit) {
-    val enabled = engagement.signedIn && !engagement.busy && engagement.url != null
-    val liked = engagement.info.rating == Rating.Like
-    val disliked = engagement.info.rating == Rating.Dislike
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp),horizontalArrangement = Arrangement.spacedBy(8.dp),verticalAlignment = Alignment.CenterVertically) {
-        FilterChip(selected = liked,onClick = { rate(Rating.Like) },enabled = enabled,
-            leadingIcon = { Icon(if (liked) Icons.Rounded.ThumbUp else Icons.Outlined.ThumbUp,null,Modifier.size(18.dp)) },
-            label = { Text(displayLikeCount(engagement.info.likes,publicLikes)) },
-            modifier = Modifier.semantics { contentDescription = if (liked) "Remove like" else "Like" })
-        FilterChip(selected = disliked,onClick = { rate(Rating.Dislike) },enabled = enabled,
-            leadingIcon = { Icon(if (disliked) Icons.Rounded.ThumbDown else Icons.Outlined.ThumbDown,null,Modifier.size(18.dp)) },
-            label = { Text(displayDislikeCount(engagement.info.dislikes,engagement.info.estimatedDislikes)) },
-            modifier = Modifier.semantics { contentDescription = if (disliked) "Remove dislike" else "Dislike" })
-        if (!engagement.signedIn) Text("Sign in to rate",style = MaterialTheme.typography.labelSmall,color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}

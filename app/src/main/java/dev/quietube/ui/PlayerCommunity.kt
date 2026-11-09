@@ -31,7 +31,7 @@ internal fun PlayerCommunity(comments: CommentsState,more: () -> Unit,refresh: (
     val pager = rememberPagerState(initialPage = 0,pageCount = { 2 })
     val scope = rememberCoroutineScope()
     Column(modifier.fillMaxWidth()) {
-        TabRow(selectedTabIndex = pager.currentPage) {
+        PrimaryTabRow(selectedTabIndex = pager.currentPage) {
             Tab(selected = pager.currentPage == 0,onClick = { scope.launch { pager.animateScrollToPage(0) } },
                 text = { Text("Comments${comments.total?.let { " · $it" } ?: ""}",maxLines = 1) })
             Tab(selected = pager.currentPage == 1,onClick = { scope.launch { pager.animateScrollToPage(1) } },text = { Text("Related videos") })
@@ -49,7 +49,7 @@ internal fun PlayerCommunity(comments: CommentsState,more: () -> Unit,refresh: (
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CommentList(state: CommentsState,more: () -> Unit,refresh: () -> Unit,pullRefresh: () -> Unit) {
-    androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = state.refreshing,onRefresh = pullRefresh,modifier = Modifier.fillMaxSize()) {
+    RefreshBox(refreshing = state.refreshing,refresh = pullRefresh,modifier = Modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxSize(),contentPadding = PaddingValues(horizontal = 20.dp,vertical = 12.dp),verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { Text("Top comments",style = MaterialTheme.typography.labelMedium) }
         if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }

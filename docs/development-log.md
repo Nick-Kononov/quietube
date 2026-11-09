@@ -761,3 +761,35 @@ stream URL handling, casting and playback-service logic are unchanged.
 Verification: debug assembly, all 130 offline JVM tests and lint passed (zero
 errors, 41 existing warnings, no new findings). Pixel checks and screenshots are
 recorded in [the Phase 4 report](ui-refresh/phase4-report.md). Phase 5 has not started.
+
+## UI refresh — Phase 5 (0.5.5)
+
+The app now uses Material 3 Expressive motion, connected rating toggles and
+filled/tonal subscription controls with shape and colour morphing. Accepted
+rating/subscription actions emit one Confirm haptic; recomposition, refresh and
+network rollback do not. Actions update immediately, serialize requests and
+roll back on failure with Retry. Unsubscribe offers Undo. Notice IDs, video
+context and account revisions prevent stale responses or snackbar actions from
+modifying a different video/account. The EngagementViewModel owns all action
+state; no new account storage or service integration was added.
+
+Indeterminate circular loaders use Expressive loading shapes, including
+pull-to-refresh. Remove animations switches them to static shapes and also
+stops skeleton shimmer. The observer reads the setting directly to avoid stale
+ValueAnimator cache values during a live setting change. Appearance settings,
+privacy restrictions and ScreenMotion's navigation/back timings are unchanged.
+
+Compose BOM is pinned to 2026.09.00 and Material 3 to 1.5.0-rc01. The owner
+approved the release candidate because stable 1.4.0 lacks the required APIs.
+The upgrade also migrates deprecated list, tab, sheet and search APIs. Search
+keeps its existing route/results/history and now uses TextFieldState with
+one-way draft updates, avoiding lost characters from a feedback loop.
+
+Verification: debug/sample assembly, all 143 offline JVM tests and lint pass
+(zero errors, 41 existing warnings, no new findings). Pixel checks cover
+anonymous playback, PiP, mini-player return, search typing/submission and an
+edge-back commit. Reduced-motion loading captures match pixel-for-pixel.
+A separate samples variant provides reproducible light/dark captures of the
+production controls using synthetic data; it does not read the owner's session.
+See [the Phase 5 report](ui-refresh/phase5-report.md) for screenshots, exact scope
+and remaining manual acceptance. Phase 6 has not started.
