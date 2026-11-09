@@ -80,10 +80,12 @@ through the existing image cache. This look-ahead stops on other networks and
 cancels obsolete requests when scrolling or leaving the list. Video buffering
 uses a white circular spinner; other loading indicators remain Expressive.
 
-The foreground app requests a steady 120 Hz UI on supported displays, using an
-available fallback on other displays. The request is released in PiP and when
-the app is paused. Your phone's global adaptive-refresh settings are unchanged;
-Android can still apply display, power-saving and thermal limits.
+The foreground app requests 120 Hz on supported displays, using an available
+fallback on other displays. To prevent low-brightness flicker when the panel
+switches to its idle rate, the app keeps redrawing while in the foreground—even
+on static pages. This uses more foreground idle GPU/battery power. Redraws and
+the refresh request stop in PiP and when paused. Global adaptive-refresh settings
+are unchanged; Android can still apply display, power-saving and thermal limits.
 
 ### UI samples
 

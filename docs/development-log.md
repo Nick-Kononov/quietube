@@ -866,3 +866,30 @@ Playback and PiP worked in the isolated signed-out app. Five new offline tests
 cover Pixel/fractional modes, 90/60 Hz fallback, higher-rate-only displays and
 invalid/missing rates. Verification and final installation are recorded in the
 Phase 5 report.
+
+## Account idle refresh correction (0.5.8)
+
+The owner's Account-page report exposed a gap in the 0.5.7 check: DisplayManager
+reported the requested/cached 120 Hz, while SurfaceFlinger's pacesetter showed
+the actual render and physical modes dropping to 60 Hz while idle. Those earlier
+DisplayManager readings were insufficient to claim a steady physical 120 Hz.
+Explicit display-mode and View/Compose frame-rate preferences were tested but
+also allowed the compositor's idle fallback; they were not retained.
+
+SmoothRefreshRate now keeps a foreground-only, vsync-scheduled redraw cadence
+alongside the existing window preference. It changes no visual property and
+stops/removes its callback on pause and PiP. This keeps static pages active for
+the compositor, at the cost of higher GPU/battery use while the app is open and
+idle. Global adaptive settings, permissions and dependencies are unchanged.
+
+In the isolated Account screen, SurfaceFlinger—not DisplayManager—reported
+120 Hz render and physical modes in all 25 idle/tap samples. Lifecycle, release
+build and signed-in Account checks are recorded in the Phase 5 report. This is a
+rendering workaround for the panel/idle-policy interaction, not a theme-colour
+change or a claim that a refresh hint alone pins the panel.
+
+The installed optimized release also passed 25 signed-in Account idle/tap
+samples at a real 120 Hz, and the owner confirmed the visible flicker is gone.
+The PiP check rendered zero UI frames over two seconds with its refresh preference
+cleared. All 154 offline tests and builds passed, with no new lint findings.
+Temporary stay-awake was restored; global adaptive refresh remains enabled.

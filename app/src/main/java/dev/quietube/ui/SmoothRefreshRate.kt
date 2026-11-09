@@ -14,7 +14,20 @@ internal fun smoothRefreshRate(rates: List<Float>): Float {
 internal class SmoothRefreshRate(private val window: Window) {
     private val originalRate = window.attributes.preferredRefreshRate
     private val originalBalance = if (Build.VERSION.SDK_INT >= 35) window.isFrameRatePowerSavingsBalanced else false
+    private var drawing = false
+    // Keep the compositor out of its 60 Hz idle mode; a window preference alone does not hold it.
+    private val redraw = object : Runnable {
+        override fun run() {
+            if (!drawing) return
+            window.decorView.invalidate()
+            window.decorView.postOnAnimation(this)
+        }
+    }
     fun active(enabled: Boolean) {
+        if (drawing != enabled) {
+            drawing = enabled
+            if (enabled) window.decorView.postOnAnimation(redraw) else window.decorView.removeCallbacks(redraw)
+        }
         val display = window.decorView.display ?: window.context.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
         val current = display?.mode
         val rates = display?.supportedModes?.filter { current != null && it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }?.map { it.refreshRate }.orEmpty()
