@@ -80,6 +80,11 @@ through the existing image cache. This look-ahead stops on other networks and
 cancels obsolete requests when scrolling or leaving the list. Video buffering
 uses a white circular spinner; other loading indicators remain Expressive.
 
+The foreground app requests a steady 120 Hz UI on supported displays, using an
+available fallback on other displays. The request is released in PiP and when
+the app is paused. Your phone's global adaptive-refresh settings are unchanged;
+Android can still apply display, power-saving and thermal limits.
+
 ### UI samples
 
 The isolated `samples` variant renders the production controls with synthetic

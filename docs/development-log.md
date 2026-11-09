@@ -844,3 +844,25 @@ change. No theme, ripple, navigation or playback change was made for it. A
 phone-wide fixed refresh rate is a workaround with a battery-use tradeoff;
 it is kept separate from the app defaults. Source and test results remain those
 of 0.5.6.
+
+## Foreground 120 Hz UI (0.5.7)
+
+Following the display-flicker diagnosis, the owner requested steady 120 Hz inside
+the app while retaining adaptive refresh for the phone. MainActivity now applies
+a window-scoped refresh-rate preference while resumed outside PiP. It selects
+120 Hz (including fractional 119.88 Hz modes) at the current resolution, falls
+back to an available rate on other displays, and restores the original window
+preference when paused or in PiP. Configuration/focus changes reapply the request
+without repeatedly rewriting unchanged attributes. Android 15+ window frame-rate
+balancing is disabled only while the foreground request is active and restored
+on release. No system setting, theme colour, artificial animation or permission
+was added. Android retains authority over user limits, power saving and thermal
+constraints.
+
+On the Pixel 8, dark Settings stayed at 120 Hz in all 15 measured idle/tap samples,
+with global min refresh unset and peak refresh unchanged. The window request
+cleared after leaving the app and entering PiP, then returned on PiP expansion.
+Playback and PiP worked in the isolated signed-out app. Five new offline tests
+cover Pixel/fractional modes, 90/60 Hz fallback, higher-rate-only displays and
+invalid/missing rates. Verification and final installation are recorded in the
+Phase 5 report.

@@ -51,6 +51,8 @@ class MainActivity : ComponentActivity() {
     private var playerBounds: Rect? = null
     private var appliedPip: Pair<Boolean, Rect?>? = null
     private var fullscreen = false
+    private var refreshResumed = false
+    private val smoothRefresh by lazy { SmoothRefreshRate(window) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -266,6 +268,23 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    override fun onResume() {
+        super.onResume()
+        refreshResumed = true
+        smoothRefresh.active(!inPip)
+    }
+
+    override fun onPause() {
+        refreshResumed = false
+        smoothRefresh.active(false)
+        super.onPause()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        smoothRefresh.active(refreshResumed && !inPip)
+    }
+
     private fun updateFullscreen(enabled: Boolean) {
         if (fullscreen == enabled) return
         fullscreen = enabled
@@ -286,6 +305,7 @@ class MainActivity : ComponentActivity() {
         super.onWindowFocusChanged(hasFocus)
         // Re-enter immersive playback after a dialog or another app returns focus.
         if (hasFocus && fullscreen) applySystemBars()
+        if (hasFocus) smoothRefresh.active(refreshResumed && !inPip)
     }
 
     private fun readIntent(value: Intent) {
@@ -332,5 +352,6 @@ class MainActivity : ComponentActivity() {
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         inPip = isInPictureInPictureMode
+        smoothRefresh.active(refreshResumed && !inPip)
     }
 }

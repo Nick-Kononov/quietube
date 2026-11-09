@@ -4,7 +4,7 @@
 
 Source paths below are relative to `app/src/main/java/dev/quietube/`.
 
-1. **Dependencies:** `app/build.gradle.kts` pins Compose BOM `2026.09.00` and Material 3 `1.5.0-rc01`; version is now 0.5.6 (17). The owner explicitly approved the release candidate because the latest stable Material 3, 1.4.0, does not expose the required Expressive components. Activity, Navigation and Lifecycle did not require upgrades. No analytics, logging, Play Services, Firebase or third-party network integration was added. Expressive loading opt-ins are file-local.
+1. **Dependencies:** `app/build.gradle.kts` pins Compose BOM `2026.09.00` and Material 3 `1.5.0-rc01`; version is now 0.5.7 (18). The owner explicitly approved the release candidate because the latest stable Material 3, 1.4.0, does not expose the required Expressive components. Activity, Navigation and Lifecycle did not require upgrades. No analytics, logging, Play Services, Firebase or third-party network integration was added. Expressive loading opt-ins are file-local.
 2. **Theme and motion:** `ui/Theme.kt:136` uses MaterialExpressiveTheme with MotionScheme.expressive(), retaining the complete brand/wallpaper schemes, typography, shapes and appearance preferences. ScreenMotion and its back-preview timings are unchanged.
 3. **Connected ratings:** `ui/EngagementButtons.kt:27` uses ButtonGroup with connected ToggleButton shapes, icons and counts, filled checked states and adaptive overflow. Like/Remove like and Dislike/Remove dislike accessibility labels remain. Signed-out controls remain disabled; “Sign in to rate” appears as a transient snackbar only after an attempted tap. Targets have a 48dp minimum height.
 4. **Subscription:** `ui/EngagementButtons.kt` uses primary filled styling for Subscribe and tonal styling for Subscribed. ToggleButton supplies the shape morph; animateColorAsState uses the Expressive fast-effects spec for the colour morph. Pending requests disable repeat taps. `MainActivity.kt:109` collects one Confirm haptic event per accepted mutation, including Retry and Undo, rather than firing on recomposition, refresh or rollback.
@@ -19,13 +19,13 @@ Source paths below are relative to `app/src/main/java/dev/quietube/`.
 ./gradlew assembleDebug assembleRelease assembleSamples testDebugUnitTest lintDebug
 ```
 
-Final combined build succeeded in 2m 15s (155 tasks: 43 executed, 112 up-to-date). All 149 offline JVM tests pass, zero failures/errors. Lint has zero errors, the same 41 existing warnings, and no new findings against the pre-phase XML report. Compilation has no deprecation warnings. `git diff --check` passes.
+Final combined build succeeded in 1m 47s (155 tasks: 47 executed, 108 up-to-date). All 154 offline JVM tests pass, zero failures/errors. Lint has zero errors, the same 41 existing warnings, and no new findings against the pre-phase XML report. Compilation has no deprecation warnings. `git diff --check` passes.
 
 The 13 new tests cover synchronous optimistic state, accepted results, exact rollback and retry, active-rating removal, like/dislike count handling, unsubscribe/undo, duplicate-tap serialization, sign-out invalidation, non-cancellable stale responses, notice invalidation, account-revision races, and one haptic event per accepted action. No JVM test contacts YouTube.
 
 ### Pixel 8
 
-- Installed the optimized 0.5.6 release APK over the existing app without clearing its account/data.
+- Installed the optimized 0.5.7 release APK over the existing app without clearing its account/data.
 - Used the separate signed-out sample installation for anonymous playback: the test video played, MediaSession reported PLAYING, PiP reported a pinned task, and Back returned to a playing mini player above navigation. Playback was paused and closed afterward.
 - Search expanded, retained exact injected text (`blender`, then `quietube`), submitted with Enter and collapsed to results with navigation visible. The final collapsed input bounds began at y=132 rather than under the status bar. Edge-back committed from search to Home. This checks the gesture's committed destination, not frame-by-frame predictive preview quality.
 - Inspected native light/dark component samples. The accessibility tree contains checked toggle parents, disabled signed-out controls and loading semantics; the rating targets measured 126px at the device's 2.625 density (48dp).
@@ -92,6 +92,37 @@ were restored after comparison; the owner chose to retain adaptive refresh. Andr
 boosting](https://developer.android.com/develop/ui/views/animations/adaptive-refresh-rate#general-arr-policy).
 
 No app background/ripple change was needed. Fixed refresh is a phone-wide
-workaround with a battery-use tradeoff, separate from the app defaults. This
-investigation changes documentation only; the 149-test/build/lint results above
-still apply to the unchanged 0.5.6 source.
+workaround with a battery-use tradeoff, separate from the app defaults. At that stage the investigation changed documentation only. The app-scoped
+implementation below subsequently added the foreground refresh-rate request.
+
+## App-scoped 120 Hz — 0.5.7
+
+The owner subsequently requested steady 120 Hz inside YouPoop with global adaptive
+refresh retained. `ui/SmoothRefreshRate.kt` selects the supported rate at the
+current resolution and applies a foreground-window `preferredRefreshRate`.
+MainActivity releases the preference on pause/PiP and reapplies it on resume,
+configuration changes and focus return. On API 35+, window frame-rate balancing
+is disabled only while this request is active and its original value is restored
+on release. The implementation uses public APIs, makes no system-settings writes
+and runs no artificial animation. Android's display, power and thermal policies
+can still override the preference.
+
+With the phone's original adaptive settings unchanged, the Pixel 8 stayed at
+120 Hz in all 15 measured Settings samples before/during/after empty-header taps.
+The request was absent from the background/PiP window and restored on PiP
+expansion. Anonymous playback and PiP were checked using the separate sample
+installation. Five new tests cover mode selection and fallback, including
+fractional refresh rates and invalid input. There are now 154 passing offline
+JVM tests. This supersedes the earlier diagnosis-only outcome; theme colours and
+ripples remain unchanged.
+
+The optimized 0.5.7 release was installed over the signed-in app without clearing
+its data. Dark Settings stayed at 120 Hz in all 12 additional idle/tap samples;
+global minimum refresh remained unset and peak refresh was unchanged. Temporary
+plugged-in stay-awake was restored afterward. The current combined debug/release/
+samples build, all 154 offline tests and lint pass, with zero errors and the same
+41 pre-existing warnings. No new dependency or permission was introduced.
+
+A brief release Settings scroll smoke recorded 49 rendered frames, one janky
+frame, zero missed Vsync, and a 5 ms median render duration. This is a small
+interaction check, not a claim of universally jank-free 120 fps across the app.
