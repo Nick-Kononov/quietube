@@ -80,3 +80,18 @@ No further owner decision is needed to review this phase. The requested PR targe
 - `ThumbnailPrefetcher.kt` and `PrefetchVisibleThumbnails` prepare two offscreen covers ahead and one behind, with no more than three requests. They reuse the same anonymous Coil loader and matching decoded dimensions, cancel outdated requests, run on unmetered Wi-Fi, and stop before sign-out cache cleanup. Search/player route guards also prevent outgoing lists from replacing the current playback-prefetch queue. A separate sample-mode check confirmed a 960 × 540 thumbnail in memory before any image was displayed. This verifies real cache warming, not a percentage improvement in scrolling latency; network-dependent throughput was not benchmarked.
 
 The additional six JVM tests cover look-ahead selection, skeleton/end-of-feed keys, supplied-image fallback, deduplication, cancellation, Wi-Fi gating, request bounds and size changes. The synthetic component screenshots above have been refreshed. No YouTube ratings/subscriptions or sign-out were performed against the owner's session.
+
+## Dark Settings tap flicker investigation
+
+The owner's empty-area tap report was reproduced as a physical display-mode
+change on the Pixel 8. A captured 15,000-pixel Settings-header background region
+remained exactly `#101215` (zero differing pixels), while device diagnostics
+showed 60 → 120 → 60 Hz on touch. A temporary 120 Hz minimum kept the mode stable,
+and the owner confirmed the visible flicker stopped. The temporary overrides
+were restored after comparison; the owner chose to retain adaptive refresh. Android documents [touch-triggered refresh-rate
+boosting](https://developer.android.com/develop/ui/views/animations/adaptive-refresh-rate#general-arr-policy).
+
+No app background/ripple change was needed. Fixed refresh is a phone-wide
+workaround with a battery-use tradeoff, separate from the app defaults. This
+investigation changes documentation only; the 149-test/build/lint results above
+still apply to the unchanged 0.5.6 source.

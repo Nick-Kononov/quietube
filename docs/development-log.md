@@ -828,3 +828,19 @@ confirm tap-only feedback, direct Account/Settings navigation, short/long
 edge-back completion and an offscreen 960 × 540 decoded thumbnail in memory.
 Updated synthetic light/dark samples are included in the Phase 5 report. The
 release variant is used for the final install to avoid debug rendering overhead.
+
+## Dark Settings flicker investigation
+
+The owner noticed a slight brightness flicker on empty-area taps in dark
+Settings on the Pixel 8. In the separate signed-out installation, a 15,000-pixel
+background region stayed exactly #101215 before and after tapping the empty
+Settings header. Display diagnostics instead showed the physical mode switching
+60 → 120 → 60 Hz on touch. Holding 120 Hz kept the mode stable, and the owner
+confirmed the visible flicker stopped. The temporary refresh/stay-awake overrides
+were restored after comparison; the owner chose to retain adaptive refresh.
+
+This was a display refresh-rate effect rather than an app background-colour
+change. No theme, ripple, navigation or playback change was made for it. A
+phone-wide fixed refresh rate is a workaround with a battery-use tradeoff;
+it is kept separate from the app defaults. Source and test results remain those
+of 0.5.6.
