@@ -25,10 +25,14 @@ import kotlinx.coroutines.launch
 
 @Composable
 internal fun PlayerCommunity(comments: CommentsState,more: () -> Unit,refresh: () -> Unit,pullRefresh: () -> Unit,related: List<Video>,
-    play: (String) -> Unit,prefetch: (List<String>) -> Unit,modifier: Modifier = Modifier) {
+    play: (String) -> Unit,prefetch: (List<String>) -> Unit,modifier: Modifier = Modifier,active: Boolean = true,thumbnailPrefetch: (List<ThumbnailRequest>) -> Unit = {}) {
     val relatedList = androidx.compose.foundation.lazy.rememberLazyListState()
-    PrefetchVisibleVideos(relatedList,prefetch)
     val pager = rememberPagerState(initialPage = 0,pageCount = { 2 })
+    LaunchedEffect(active,pager.currentPage) { if (active && pager.currentPage == 0) prefetch(emptyList()) }
+    if (active && pager.currentPage == 1) {
+        PrefetchVisibleVideos(relatedList,prefetch)
+        PrefetchVisibleThumbnails(relatedList,related,thumbnailPrefetch)
+    }
     val scope = rememberCoroutineScope()
     Column(modifier.fillMaxWidth()) {
         PrimaryTabRow(selectedTabIndex = pager.currentPage) {

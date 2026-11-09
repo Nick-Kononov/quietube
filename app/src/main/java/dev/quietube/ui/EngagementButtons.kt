@@ -1,6 +1,13 @@
 package dev.quietube.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ThumbDown
@@ -17,7 +24,8 @@ import dev.quietube.account.actions.EngagementState
 import dev.quietube.data.Rating
 
 @Composable
-internal fun RatingButtons(engagement: EngagementState,publicLikes: Long?,rate: (Rating) -> Unit) {
+internal fun RatingButtons(engagement: EngagementState,publicLikes: Long?,rate: (Rating) -> Unit,signInToRate: () -> Unit = {}) {
+    val hint by rememberUpdatedState(signInToRate)
     val enabled = engagement.signedIn && !engagement.busy && engagement.url != null
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         ButtonGroup(overflowIndicator = { menu -> ButtonGroupDefaults.OverflowIndicator(menu) },horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -26,17 +34,25 @@ internal fun RatingButtons(engagement: EngagementState,publicLikes: Long?,rate: 
                 val label = if (rating == Rating.Like) "Like" else "Dislike"
                 val actionLabel = if (checked) "Remove ${label.lowercase()}" else label
                 val count = if (rating == Rating.Like) displayLikeCount(engagement.info.likes,publicLikes) else displayDislikeCount(engagement.info.dislikes,engagement.info.estimatedDislikes)
-                val click = { rate(rating) }
+                val click = { if (!engagement.signedIn) hint() else if (enabled) rate(rating) }
                 customItem(buttonGroupContent = {
+                    val attempt = if (engagement.signedIn) Modifier else Modifier.pointerInput(Unit) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false,pass = PointerEventPass.Initial)
+                            if (waitForUpOrCancellation(pass = PointerEventPass.Initial) != null) hint()
+                        }
+                    }
+                        .semantics { customActions = listOf(CustomAccessibilityAction("Sign in to rate") { hint(); true }) }
+                    Box(attempt) {
                     ToggleButton(checked = checked,onCheckedChange = { click() },enabled = enabled,
                         shapes = if (index == 0) ButtonGroupDefaults.connectedLeadingButtonShapes() else ButtonGroupDefaults.connectedTrailingButtonShapes(),
                         modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = actionLabel },
                         icon = { Icon(if (rating == Rating.Like) { if (checked) Icons.Rounded.ThumbUp else Icons.Outlined.ThumbUp }
                             else { if (checked) Icons.Rounded.ThumbDown else Icons.Outlined.ThumbDown },null) }) { Text(count) }
-                },menuContent = { menu -> DropdownMenuItem(text = { Text("$actionLabel · $count") },enabled = enabled,onClick = { menu.dismiss(); click() }) })
+                    }
+                },menuContent = { menu -> DropdownMenuItem(text = { Text("$actionLabel · $count") },enabled = enabled || !engagement.signedIn,onClick = { menu.dismiss(); click() }) })
             }
         }
-        if (!engagement.signedIn) Text("Sign in to rate",style = MaterialTheme.typography.labelSmall,color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

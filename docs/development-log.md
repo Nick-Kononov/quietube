@@ -793,3 +793,38 @@ A separate samples variant provides reproducible light/dark captures of the
 production controls using synthetic data; it does not read the owner's session.
 See [the Phase 5 report](ui-refresh/phase5-report.md) for screenshots, exact scope
 and remaining manual acceptance. Phase 6 has not started.
+
+## Phase 5 review fixes (0.5.6)
+
+The profile button now opens Account directly; Settings stays on Account. The
+persistent signed-out rating note is removed. Attempting to tap a disabled
+rating shows a short sign-in snackbar, without enabling the action; the same
+explanation is available as an accessibility action. Successful watch-history
+session starts and progress reports are silent. Failures still report that sync
+was not confirmed. The video buffering overlay returns to a white circular
+spinner; the mini player and other loaders retain Expressive indicators.
+
+Predictive-back completion now keeps the outgoing screen hidden until NavHost
+removes it. Previously our 450 ms animation reset its alpha while Navigation
+could retain the outgoing layer for its 1000 ms hold, revealing it again. The
+change preserves the gesture geometry and timings and supports another back
+gesture while the previous layer is still settling.
+
+Thumbnail loading was separate from playback prefetch: images only started
+loading when their cards appeared. Feeds, search and Related now warm two covers
+ahead and one behind through the existing anonymous Coil loader and cache, at
+the card's decoded size. Work is deduplicated, bounded to three requests and
+cancelled when no longer relevant. Speculation is restricted to unmetered Wi-Fi;
+visible images keep their existing network behaviour. Sign-out cancels pending
+look-ahead before wiping the image cache. No new dependency, credentials or
+network integration is involved. Outgoing search/player callbacks can no longer
+replace the active feed's playback-prefetch queue; Related only prefetches while
+its tab is selected.
+
+Six new offline tests cover cover selection, unknown/skeleton keys, image
+fallbacks, request reuse/cancellation, network policy, bounds and size changes.
+All 149 JVM tests pass with no new lint findings. Native checks on the Pixel
+confirm tap-only feedback, direct Account/Settings navigation, short/long
+edge-back completion and an offscreen 960 × 540 decoded thumbnail in memory.
+Updated synthetic light/dark samples are included in the Phase 5 report. The
+release variant is used for the final install to avoid debug rendering overhead.

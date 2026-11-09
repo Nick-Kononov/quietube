@@ -23,7 +23,7 @@ YouTube session encrypted on the device. On the home screen the app is named
   experimental TV device-code flow, or a Netscape `cookies.txt` import. You
   then get Home, Subscriptions, History, Watch Later, Liked videos and
   Playlists, plus like, dislike and subscribe actions. Watch-history reporting
-  is optional.
+  is optional; successful history updates are silent.
 - **Comments and descriptions**, with optional dislike estimates from
   [Return YouTube Dislike](https://returnyoutubedislike.com/) (off by default).
 - **Play on TV**: launches the video in a TV's YouTube app through DIAL/Lounge,
@@ -35,7 +35,8 @@ YouTube session encrypted on the device. On the home screen the app is named
   wallpaper colours, expressive controls and loading indicators, predictive
   back, a bottom bar on phones and a navigation rail on wider screens. Ratings
   and subscriptions update immediately, roll back on failure with Retry, and
-  offer Undo after unsubscribe.
+  offer Undo after unsubscribe. Signed-out rating buttons explain sign-in only
+  when tapped; the profile button opens Account directly.
 
 ## Privacy and security
 
@@ -74,6 +75,11 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 The release build is signed with the local debug key, so it installs over a
 debug build and keeps the signed-in session. Do not distribute it as is.
 
+Thumbnail images are warmed two cards ahead and one behind on unmetered Wi-Fi,
+through the existing image cache. This look-ahead stops on other networks and
+cancels obsolete requests when scrolling or leaving the list. Video buffering
+uses a white circular spinner; other loading indicators remain Expressive.
+
 ### UI samples
 
 The isolated `samples` variant renders the production controls with synthetic
@@ -88,6 +94,8 @@ adb shell am start -n dev.quietube.samples/dev.quietube.ui.ExpressiveSamplesActi
 
 It installs beside the normal app. Use `--ez dark false` for light samples.
 This variant and its sample activity are excluded from debug/release builds.
+For an offscreen image-cache check, add `--ez thumbnails true`; this mode requests
+one public YouTube thumbnail and shows whether it was cached before display.
 
 ### Tests
 

@@ -32,6 +32,7 @@ class AccountViewModel @Inject constructor(
     private val repository: DefaultVideoRepository,
     private val positions: ResumeDao,
     private val searchHistory: dev.quietube.ui.SearchHistory,
+    private val thumbnails: dev.quietube.ui.ThumbnailPrefetcher,
     private val appearancePreferences: dev.quietube.ui.AppearancePreferences,
     private val actions: dev.quietube.account.actions.YouTubeActions,
 ) : ViewModel() {
@@ -175,6 +176,7 @@ class AccountViewModel @Inject constructor(
             // Cleanup must not stop halfway, even if the screen goes away mid sign-out.
             try { withContext(NonCancellable) {
                 tv.cancelNetwork()
+                thumbnails.submit(emptyList())
                 sessions.clear()
                 client.clear(); source.clear(); repository.clearLocalFeed()
                 positions.clear()

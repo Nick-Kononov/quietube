@@ -31,9 +31,12 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 fun FeedScreen(state: FeedState, session: SessionStatus,
     search: () -> Unit, account: () -> Unit, refresh: () -> Unit, more: () -> Unit,
     play: (String) -> Unit, playlist: (PlaylistSummary) -> Unit, back: () -> Unit, prefetch: (List<String>) -> Unit = {},
-    pullRefresh: () -> Unit = refresh, retry: () -> Unit = refresh, profile: Profile? = null, settings: (() -> Unit)? = null, reselect: Int = 0, active: Boolean = true) {
+    pullRefresh: () -> Unit = refresh, retry: () -> Unit = refresh, profile: Profile? = null, reselect: Int = 0, active: Boolean = true,thumbnailPrefetch: (List<ThumbnailRequest>) -> Unit = {}) {
     val listState = rememberLazyListState()
-    if (active) PrefetchVisibleVideos(listState, prefetch)
+    if (active) {
+        PrefetchVisibleVideos(listState, prefetch)
+        PrefetchVisibleThumbnails(listState,state.videos,thumbnailPrefetch)
+    }
     val restoreIndex = remember { listState.firstVisibleItemIndex }
     var restoring by remember { mutableStateOf(restoreIndex > 0 || listState.firstVisibleItemScrollOffset > 0) }
     // Refill pages before attaching the restored list, or a short first page would clamp its saved position.
@@ -72,7 +75,7 @@ fun FeedScreen(state: FeedState, session: SessionStatus,
             }
         }, scrollBehavior = scroll, actions = {
             IconButton(onClick = search) { Icon(Icons.Rounded.Search, "Search YouTube") }
-            AccountButton(session.signedIn, profile, account, settings)
+            AccountButton(session.signedIn, profile, account)
         })
     }) { insets ->
         Column(Modifier.fillMaxSize().padding(insets)) {

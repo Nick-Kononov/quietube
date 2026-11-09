@@ -23,14 +23,17 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(state: SearchState, recent: List<String>, edit: (String) -> Unit, search: (String) -> Unit, more: () -> Unit,
-    clearHistory: () -> Unit, play: (String) -> Unit, back: () -> Unit, expandedChange: (Boolean) -> Unit, prefetch: (List<String>) -> Unit = {}) {
+    clearHistory: () -> Unit, play: (String) -> Unit, back: () -> Unit, expandedChange: (Boolean) -> Unit, prefetch: (List<String>) -> Unit = {},thumbnailPrefetch: (List<ThumbnailRequest>) -> Unit = {}) {
     val bar = rememberSearchBarState(initialValue = SearchBarValue.Expanded)
     val text = rememberTextFieldState(state.draft)
     val scope = rememberCoroutineScope()
     val expanded = bar.currentValue == SearchBarValue.Expanded
     val list = rememberLazyListState()
     val keyboard = LocalSoftwareKeyboardController.current
-    if (!expanded) PrefetchVisibleVideos(list, prefetch)
+    if (!expanded) {
+        PrefetchVisibleVideos(list, prefetch)
+        PrefetchVisibleThumbnails(list,state.videos,thumbnailPrefetch)
+    }
     LaunchedEffect(text) { snapshotFlow { text.text.toString() }.collect(edit) }
     SideEffect { expandedChange(expanded) }
     DisposableEffect(Unit) { onDispose { expandedChange(false) } }

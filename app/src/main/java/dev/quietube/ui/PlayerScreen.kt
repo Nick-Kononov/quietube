@@ -48,13 +48,15 @@ import androidx.media3.ui.PlayerView
 import dev.quietube.playback.PlaybackState
 import dev.quietube.account.actions.*
 import dev.quietube.data.Rating
+import kotlinx.coroutines.launch
 
 @Composable
 fun PlayerScreen(state: PlaybackState, player: androidx.media3.common.Player?, connectionError: Boolean, inPip: Boolean,
     comments: CommentsState, moreComments: () -> Unit, refreshComments: () -> Unit, pullRefreshComments: () -> Unit,
     engagement: EngagementState, rate: (Rating) -> Unit, subscribe: () -> Unit, refreshAccount: () -> Unit, settings: () -> Unit,
     back: () -> Unit, pip: () -> Unit, toggleFullscreen: () -> Unit, bounds: (Rect) -> Unit, quality: (Int?) -> Unit, play: (String) -> Unit, prefetch: (List<String>) -> Unit = {},
-    cast: CastState = CastState(), castActions: CastActions? = null, snackbar: SnackbarHostState? = null, sheetVisible: (Boolean) -> Unit = {}) {
+    cast: CastState = CastState(), castActions: CastActions? = null, snackbar: SnackbarHostState? = null, sheetVisible: (Boolean) -> Unit = {}, active: Boolean = true,thumbnailPrefetch: (List<ThumbnailRequest>) -> Unit = {}) {
+    val scope = rememberCoroutineScope()
     var showQuality by rememberSaveable(state.video?.url) { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -91,7 +93,7 @@ fun PlayerScreen(state: PlaybackState, player: androidx.media3.common.Player?, c
                 it.useController = !inPip
                 it.keepScreenOn = state.isPlaying && !inPip
             }, onReset = null, onRelease = { it.player = null })
-            if (state.resolving || state.buffering) AppLoadingIndicator(contained = true)
+            if (state.resolving || state.buffering) PlayerLoadingIndicator()
             // Shown and hidden with the player's own controls, like YouTube's overlay.
             if (!inPip) androidx.compose.animation.AnimatedVisibility(controlsVisible, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) {
                 CompositionLocalProvider(LocalContentColor provides OverlayWhite) {
@@ -121,7 +123,7 @@ fun PlayerScreen(state: PlaybackState, player: androidx.media3.common.Player?, c
                 }
                 Icon(if (detailsExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,null)
             }
-            RatingButtons(engagement,state.video?.likeCount,rate)
+            RatingButtons(engagement,state.video?.likeCount,rate,signInToRate = { snackbar?.let { scope.launch { it.showSnackbar("Sign in to rate") } } })
             cast.playingOn?.let { tv ->
                 Row(Modifier.padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Playing on ${tv.name}${if (cast.direct) " · direct" else ""}",style = MaterialTheme.typography.bodySmall,
@@ -135,7 +137,7 @@ fun PlayerScreen(state: PlaybackState, player: androidx.media3.common.Player?, c
                 TextButton(onClick = { state.video?.url?.let(play) }) { Text("Retry playback") }
             }
             key(state.video?.url) {
-                PlayerCommunity(comments,moreComments,refreshComments,pullRefreshComments,state.related,play,prefetch,Modifier.weight(1f))
+                PlayerCommunity(comments,moreComments,refreshComments,pullRefreshComments,state.related,play,prefetch,Modifier.weight(1f),active = active,thumbnailPrefetch = thumbnailPrefetch)
             }
         }
     }

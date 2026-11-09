@@ -41,6 +41,7 @@ import dev.quietube.ui.*
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @javax.inject.Inject lateinit var thumbnails: ThumbnailPrefetcher
     @javax.inject.Inject lateinit var videos: dev.quietube.data.VideoRepository
     private var inPip by mutableStateOf(false)
     private var openPlayer by mutableStateOf(false)
@@ -168,6 +169,7 @@ class MainActivity : ComponentActivity() {
                         launchSingleTop = true
                     }
                 }
+                LaunchedEffect(currentRoute) { videos.prefetch(emptyList()); thumbnails.submit(emptyList()) }
                 val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
                 SideEffect { updateFullscreen(playerVisible && landscape && !inPip) }
                 DisposableEffect(playerVisible) {
@@ -208,8 +210,9 @@ class MainActivity : ComponentActivity() {
                                     playlist = { if (nav.currentDestination?.route == route) feeds.open(it) },
                                     back = { if (shown.playlist != null) feeds.back() else nav.popBackStack() }, prefetch = { if (nav.currentDestination?.route == route) videos.prefetch(it) },
                                     pullRefresh = { if (nav.currentDestination?.route == route) feeds.pullRefresh() },
-                                    retry = { if (nav.currentDestination?.route == route) feeds.retry() }, profile = profile, settings = goSettings,
-                                    reselect = reselections[feedPageKey(route, shown.playlist?.id)] ?: 0, active = currentRoute == route && feed.feed == destination)
+                                    retry = { if (nav.currentDestination?.route == route) feeds.retry() }, profile = profile,
+                                    reselect = reselections[feedPageKey(route, shown.playlist?.id)] ?: 0, active = currentRoute == route && feed.feed == destination,
+                                    thumbnailPrefetch = { if (nav.currentDestination?.route == route) thumbnails.submit(it) })
                                 }
                             } }
                         }
@@ -218,7 +221,7 @@ class MainActivity : ComponentActivity() {
                             LibraryScreen(session.signedIn, profile,
                                 open = { destination -> feeds.select(destination); nav.navigate(feedRoute(destination)) { launchSingleTop = true } },
                                 search = { nav.navigate("search") { launchSingleTop = true } },
-                                account = { nav.navigate("account") { launchSingleTop = true } }, settings = goSettings, reselect = reselections["library"] ?: 0)
+                                account = { nav.navigate("account") { launchSingleTop = true } }, reselect = reselections["library"] ?: 0)
                             }
                         } }
                         composable("account") { entry -> ScreenCard(entry, preview) {
@@ -237,7 +240,8 @@ class MainActivity : ComponentActivity() {
                             val state by search.state.collectAsStateWithLifecycle()
                             val recent by search.recent.collectAsStateWithLifecycle()
                             SearchScreen(state, recent, search::edit, search::search, search::more, search::clearHistory, play,
-                                back = { nav.popBackStack() }, expandedChange = { searchExpanded = it }, prefetch = videos::prefetch)
+                                back = { nav.popBackStack() }, expandedChange = { searchExpanded = it }, prefetch = { if (nav.currentDestination?.route == "search") videos.prefetch(it) },
+                                thumbnailPrefetch = { if (nav.currentDestination?.route == "search") thumbnails.submit(it) })
                         } }
                         composable("player") { entry -> ScreenCard(entry, preview) {
                             PlayerScreen(playing, shownPlayer, connectionError, inPip,
@@ -249,7 +253,8 @@ class MainActivity : ComponentActivity() {
                                     else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                                 },
                                 bounds = { if (it != playerBounds) { playerBounds = Rect(it); updatePip(pipEligible) } },
-                                quality = playback::quality, play = playback::play, prefetch = videos::prefetch,
+                                quality = playback::quality, play = playback::play, prefetch = { if (nav.currentDestination?.route == "player") videos.prefetch(it) },
+                                active = currentRoute == "player",thumbnailPrefetch = { if (nav.currentDestination?.route == "player") thumbnails.submit(it) },
                                 cast = castState, castActions = castActions, snackbar = snackbar, sheetVisible = { playerSheetVisible = it })
                         } }
                     }

@@ -87,6 +87,7 @@ internal object ScreenMotion {
 @Stable
 internal class BackPreview(private val nav: NavController) {
     var closingId by mutableStateOf<String?>(null); private set
+    var hiddenEntries by mutableStateOf(emptySet<String>()); private set
     var enteringId by mutableStateOf<String?>(null); private set
     var edge by mutableIntStateOf(NavigationEvent.EDGE_LEFT); private set
     var committed by mutableStateOf(false); private set
@@ -97,9 +98,16 @@ internal class BackPreview(private val nav: NavController) {
     private var settling: Job? = null
 
     suspend fun follow(dispatcher: NavigationEventDispatcher, scope: CoroutineScope) {
+        scope.launch {
+            nav.visibleEntries.collect { entries -> hiddenEntries = hiddenEntries.intersect(entries.map { it.id }.toSet()) }
+        }
         dispatcher.transitionState.collect { state ->
             when (state) {
                 is NavigationEventTransitionState.InProgress -> {
+                    if (committed && nav.currentBackStackEntry?.id != closingId) {
+                        closingId?.let { hiddenEntries = hiddenEntries + it }
+                        settling?.cancel(); reset()
+                    }
                     if (closingId == null) {
                         // From the start destination the system's back-to-home animation runs instead.
                         val closing = nav.currentBackStackEntry ?: return@collect
@@ -114,6 +122,8 @@ internal class BackPreview(private val nav: NavController) {
                     if (nav.currentBackStackEntry?.id != closingId) {
                         committed = true
                         commit.animateTo(1f, tween(POST_COMMIT_MS, easing = LinearEasing))
+                        // NavHost may retain its outgoing layer beyond our animation; never reveal it on reset.
+                        closingId?.let { hiddenEntries = hiddenEntries + it }
                     } else gesture.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
                     reset()
                 }
@@ -171,6 +181,7 @@ internal fun AnimatedVisibilityScope.ScreenCard(entry: NavBackStackEntry, previe
         fun place(scale: Float, left: Float) { scaleX = scale; scaleY = scale; translationX = left - width * (1 - scale) / 2 }
         val dragScale = lerp(1f, BackPreview.SCALE, p)
         when {
+            entry.id in preview.hiddenEntries -> { scaleX = 1f; scaleY = 1f; translationX = 0f; alpha = 0f }
             closing -> {
                 val shift = if (preview.edge == NavigationEvent.EDGE_RIGHT) 0f else width * (1 - BackPreview.SCALE) / 2 - margin
                 val dragLeft = width * (1 - dragScale) / 2 + shift * p
