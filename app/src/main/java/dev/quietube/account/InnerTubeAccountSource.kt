@@ -11,8 +11,8 @@ private class AccountCursor(val browseId: String, val token: String, val revisio
 @Singleton
 class InnerTubeAccountSource @Inject constructor(private val client: InnerTubeClient, private val sessions: EncryptedSessionStore, private val actions: dev.quietube.account.actions.YouTubeActions) : AccountSource {
     override suspend fun engagement(url: String) = actions.engagement(url)
-    override suspend fun rate(url: String,rating: Rating,previous: Rating) = actions.rate(url,rating,previous).also { if (it is Outcome.Success) clear() }
-    override suspend fun subscribe(channelId: String,subscribe: Boolean) = actions.subscribe(channelId,subscribe).also { if (it is Outcome.Success) clear() }
+    override suspend fun rate(url: String,rating: Rating,previous: Rating) = actions.rate(url,rating,previous).also { if (it is Outcome.Success) cache.clear() }
+    override suspend fun subscribe(channelId: String,subscribe: Boolean) = actions.subscribe(channelId,subscribe).also { if (it is Outcome.Success) cache.clear() }
     override suspend fun startWatch(url: String,position: Double) = actions.startWatch(url,position)
     override suspend fun reportWatch(ticket: WatchTicket,segments: List<Pair<Double,Double>>,position: Double,final: Boolean) = actions.reportWatch(ticket,segments,position,final).also { if (it is Outcome.Success) cache.clear() }
     private val progress = java.util.concurrent.ConcurrentHashMap<String, Long>()

@@ -3,10 +3,15 @@ package dev.quietube.links
 import java.net.URI
 import java.net.URLDecoder
 
-private val videoId = Regex("[A-Za-z0-9_-]{11}")
+/** Shapes of YouTube's IDs; anything placed in a request is checked against them first. */
+internal val VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")
+internal val CHANNEL_ID = Regex("UC[A-Za-z0-9_-]{22}")
+internal val PLAYLIST_ID = Regex("[A-Za-z0-9_-]{2,150}")
+private val digits = Regex("[0-9]+")
+private val httpsUrl = Regex("https://[^\\s<>\"\\u0000-\\u001f]+", RegexOption.IGNORE_CASE)
 private val timestamp = Regex("(?:(\\d+)h)?(?:(\\d+)m)?(?:(\\d+)s)?")
 private fun seconds(value: String): Long? {
-    if (value.matches(Regex("[0-9]+"))) return value.toLongOrNull()?.takeIf { it <= Long.MAX_VALUE / 1000 }
+    if (value.matches(digits)) return value.toLongOrNull()?.takeIf { it <= Long.MAX_VALUE / 1000 }
     val match = timestamp.matchEntire(value)?.takeIf { value.isNotEmpty() } ?: return null
     return try {
         match.groupValues.drop(1).zip(listOf(3600L, 60L, 1L)).fold(0L) { sum, (part, unit) ->
@@ -35,11 +40,10 @@ fun parseYouTubeLink(value: String): String? = try {
         val times = params.filter { it.first in setOf("t", "start") }
         val rawTime = times.singleOrNull()?.second ?: uri.rawFragment?.takeIf { it.startsWith("t=") }?.removePrefix("t=")
         val time = rawTime?.let(::seconds)
-        if (id == null || !videoId.matches(id) || times.size > 1 || (rawTime != null && time == null)) null
+        if (id == null || !VIDEO_ID.matches(id) || times.size > 1 || (rawTime != null && time == null)) null
         else "https://www.youtube.com/watch?v=$id" + (time?.let { "&t=$it" } ?: "")
     }
 } catch (_: IllegalArgumentException) { null } catch (_: java.net.URISyntaxException) { null }
 
-fun sharedYouTubeLink(text: String): String? = Regex("https://[^\\s<>\"\\u0000-\\u001f]+", RegexOption.IGNORE_CASE)
-    .findAll(text).mapNotNull { parseYouTubeLink(it.value.trimEnd('.', ',', ')', ']', '}', '!', ';')) }.firstOrNull()
+fun sharedYouTubeLink(text: String): String? = httpsUrl.findAll(text).mapNotNull { parseYouTubeLink(it.value.trimEnd('.', ',', ')', ']', '}', '!', ';')) }.firstOrNull()
 internal fun linkStartMs(canonical: String): Long? = canonical.substringAfter("&t=", "").toLongOrNull()?.let { Math.multiplyExact(it, 1000) }

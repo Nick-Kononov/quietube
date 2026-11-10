@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import dev.quietube.account.FeedState
 import dev.quietube.account.SessionStatus
+import dev.quietube.account.pagesAutomatically
 import dev.quietube.data.*
 import kotlinx.coroutines.flow.distinctUntilChanged
 
@@ -59,8 +60,9 @@ fun FeedScreen(state: FeedState, session: SessionStatus,
         if (pulling && !state.refreshing && state.error == null) listState.scrollToItem(0)
         pulling = state.refreshing
     }
-    LaunchedEffect(active, listState, state.hasMore, state.loading, state.loadingMore, state.automaticPaging) {
-        if (active && state.hasMore && !state.loading && !state.loadingMore && state.automaticPaging) {
+    val autoPage = active && state.pagesAutomatically
+    LaunchedEffect(listState, autoPage) {
+        if (autoPage) {
             snapshotFlow { val info = listState.layoutInfo; info.visibleItemsInfo.lastOrNull()?.index to info.totalItemsCount }
                 .distinctUntilChanged().collect { (last, count) -> if (last != null && count > 0 && last >= count - 3) more() }
         }

@@ -19,6 +19,8 @@ data class FeedState(val feed: AccountFeed = AccountFeed.Home, val playlist: Pla
     val videos: List<Video> = emptyList(), val playlists: List<PlaylistSummary> = emptyList(),
     val loading: Boolean = false, val refreshing: Boolean = false, val loadingMore: Boolean = false, val hasMore: Boolean = false,
     val error: VideoError? = null, val partial: Boolean = false, val automaticPaging: Boolean = true, val initialized: Boolean = true)
+/** Whether reaching the end loads the next page by itself; a failed load waits for "Try again" rather than repeating. */
+internal val FeedState.pagesAutomatically get() = hasMore && automaticPaging && !loading && !loadingMore && error == null
 @HiltViewModel
 class FeedViewModel @Inject constructor(private val repository: VideoRepository, private val sessions: EncryptedSessionStore,
     @ApplicationContext private val context: Context) : ViewModel() {

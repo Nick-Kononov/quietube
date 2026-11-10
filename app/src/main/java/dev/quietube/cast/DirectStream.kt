@@ -3,6 +3,7 @@
 package dev.quietube.cast
 
 import android.net.Uri
+import android.util.Log
 import androidx.media3.common.MimeTypes
 import androidx.media3.datasource.DataSource
 import java.io.BufferedOutputStream
@@ -48,8 +49,8 @@ internal class DirectStream(private val sources: DataSource.Factory, private val
             if (socket.inetAddress != tv) { socket.close(); continue }
             synchronized(clients) { clients += socket }
             thread(name = "tv-stream-client", isDaemon = true) {
-                // Usually the TV closing a connection; logged without URLs to diagnose source failures.
-                try { serve(socket) } catch (e: Exception) { android.util.Log.w(TAG, "Stream ended: ${e.javaClass.simpleName}: ${e.message?.take(120)}") }
+                // Usually the TV closing a connection. Only the type is logged: a source error's message can quote its URL.
+                try { serve(socket) } catch (e: Exception) { Log.w(TAG, "Stream ended: ${e.javaClass.simpleName}") }
                 finally { synchronized(clients) { clients -= socket }; runCatching { socket.close() } }
             }
         }
@@ -83,17 +84,17 @@ internal class DirectStream(private val sources: DataSource.Factory, private val
             header.indexOf(':').takeIf { it > 0 }?.let { header.substring(0, it).trim().lowercase() to header.substring(it + 1).trim() }
         }.toMap()
         val (method, target) = line.split(' ').let { (it.getOrNull(0) ?: "") to (it.getOrNull(1) ?: "") }
-        android.util.Log.i(TAG, "TV request: $method range=${headers["range"]} timeseek=${headers["timeseekrange.dlna.org"]}")
+        Log.i(TAG, "TV request: $method range=${headers["range"]} timeseek=${headers["timeseekrange.dlna.org"]}")
         val out = BufferedOutputStream(socket.getOutputStream(), 64 * 1024)
-        if (target != path || method !in setOf("GET", "HEAD")) {
+        if (target != path || method != "GET" && method != "HEAD") {
             out.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray()); out.flush(); return
         }
         val file = layout()
         val size = file.size
         val timeSeek = headers["timeseekrange.dlna.org"]?.let(::parseNpt)?.coerceIn(0, file.durationUs)
-        val byte = Regex("bytes=(\\d+)-").find(headers["range"].orEmpty())?.groupValues?.get(1)?.toLongOrNull()?.coerceIn(0, size - 1)
+        val byte = RANGE_START.find(headers["range"].orEmpty())?.groupValues?.get(1)?.toLongOrNull()?.coerceIn(0, size - 1)
         val from = byte ?: timeSeek?.let(file::offsetOf) ?: 0L
-        android.util.Log.i(TAG, "Serving from ${if (from < file.header.size) "the start" else "${file.timeOf(from) / 1_000_000}s"}")
+        Log.i(TAG, "Serving from ${if (from < file.header.size) "the start" else "${file.timeOf(from) / 1_000_000}s"}")
         val status = if (byte != null) "206 Partial Content" else "200 OK"
         val range = if (byte != null) "Content-Range: bytes $from-${size - 1}/$size\r\n" else ""
         val seekHeader = timeSeek?.let { "TimeSeekRange.dlna.org: npt=${npt(it)}-${npt(file.durationUs)}/${npt(file.durationUs)}\r\n" }.orEmpty()
@@ -175,6 +176,7 @@ internal class DirectStream(private val sources: DataSource.Factory, private val
     companion object {
         const val MIME = "video/x-matroska"
         private const val TAG = "YouPoopTv"
+        private val RANGE_START = Regex("bytes=(\\d+)-")
         /** DLNA.ORG_OP=11: byte and time seek; FLAGS: streaming transfer mode. */
         const val FEATURES = "DLNA.ORG_OP=11;DLNA.ORG_CI=1;DLNA.ORG_FLAGS=01700000000000000000000000000000"
 
@@ -207,11 +209,11 @@ internal object Dlna {
     fun stop(controlUrl: String) { action(controlUrl, "Stop", "") }
 
     /** Current position in the stream and whether the TV is playing (not paused, stopped or loading). */
-    fun status(controlUrl: String): Pair<Long, Boolean>? {
-        val time = Regex("<RelTime>([0-9:.]+)</RelTime>").find(action(controlUrl, "GetPositionInfo", "") ?: return null)?.groupValues?.get(1)
-        val state = Regex("<CurrentTransportState>(\\w+)</CurrentTransportState>").find(action(controlUrl, "GetTransportInfo", "") ?: return null)?.groupValues?.get(1)
+    fun status(controlUrl: String): TvStatus? {
+        val time = REL_TIME.find(action(controlUrl, "GetPositionInfo", "") ?: return null)?.groupValues?.get(1)
+        val state = TRANSPORT_STATE.find(action(controlUrl, "GetTransportInfo", "") ?: return null)?.groupValues?.get(1)
         val seconds = time?.split(':')?.map { it.toDoubleOrNull() ?: return null }?.fold(0.0) { total, part -> total * 60 + part } ?: return null
-        return (seconds * 1000).toLong() to (state == "PLAYING")
+        return TvStatus((seconds * 1000).toLong(), state == "PLAYING")
     }
 
     /** Seek within the current stream; the TV re-requests it at the indexed offset. */
@@ -230,4 +232,6 @@ internal object Dlna {
     private fun xml(value: String) = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 
     const val SERVICE = "urn:schemas-upnp-org:service:AVTransport:1"
+    private val REL_TIME = Regex("<RelTime>([0-9:.]+)</RelTime>")
+    private val TRANSPORT_STATE = Regex("<CurrentTransportState>(\\w+)</CurrentTransportState>")
 }

@@ -15,6 +15,13 @@ class FeedSnapshotsTest {
         assertFalse(home.state.loadingMore)
         assertEquals("Subscription", cache.get(AccountFeed.Subscriptions)!!.state.videos.single().title)
     }
+    @Test fun aFailedPageWaitsForRetryInsteadOfPagingAgain() {
+        val idle = FeedState(videos = listOf(video), hasMore = true)
+        assertTrue(idle.pagesAutomatically)
+        assertFalse(idle.copy(error = VideoError.Network).pagesAutomatically)
+        assertFalse(idle.copy(loadingMore = true).pagesAutomatically); assertFalse(idle.copy(loading = true).pagesAutomatically)
+        assertFalse(idle.copy(hasMore = false).pagesAutomatically); assertFalse(idle.copy(automaticPaging = false).pagesAutomatically)
+    }
     @Test fun playlistBackRestoresLibraryAndUnfinishedInitialLoadsAreNotCached() {
         val cache = FeedSnapshots(); val playlist = PlaylistSummary("id", "Playlist", null, "1 video")
         cache.save(FeedState(feed = AccountFeed.Playlists, playlists = listOf(playlist)), null, false)
