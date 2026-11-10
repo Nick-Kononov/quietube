@@ -14,7 +14,7 @@ data class WatchSample(val url: String?,val position: Double,val playing: Boolea
     val enabled: Boolean,val discontinuity: Boolean = false,val speed: Float = 1f)
 class WatchedIntervals {
     private var previous: WatchSample? = null
-    private val intervals = mutableListOf<Pair<Double,Double>>()
+    private val intervals = mutableListOf<WatchSegment>()
     fun sample(value: WatchSample) {
         previous?.let { old ->
             val delta = value.position-old.position
@@ -22,13 +22,13 @@ class WatchedIntervals {
             if (old.url == value.url && old.revision == value.revision && old.playing && old.enabled && value.enabled && !value.discontinuity &&
                 delta > 0 && delta <= wall*old.speed+2.0 && value.position.isFinite()) {
                 val last = intervals.lastOrNull()
-                if (last != null && kotlin.math.abs(last.second-old.position) < 0.05) intervals[intervals.lastIndex] = last.first to value.position
-                else intervals.add(old.position to value.position)
+                if (last != null && kotlin.math.abs(last.end-old.position) < 0.05) intervals[intervals.lastIndex] = last.copy(end = value.position)
+                else intervals.add(WatchSegment(old.position, value.position))
             }
         }
         previous = value
     }
-    fun drain(): List<Pair<Double,Double>> = intervals.toList().also { intervals.clear() }
+    fun drain(): List<WatchSegment> = intervals.toList().also { intervals.clear() }
     fun clear() { previous = null; intervals.clear() }
 }
 class HistoryReporter @Inject constructor(private val repository: VideoRepository,private val sessions: EncryptedSessionStore,
@@ -47,7 +47,7 @@ class HistoryReporter @Inject constructor(private val repository: VideoRepositor
             suspend fun flush(sample: WatchSample) {
                 val segments = watched.drain()
                 if (ticket == null || segments.isEmpty()) return
-                when (val result = repository.reportWatch(ticket!!,segments,sample.position,!sample.playing)) {
+                when (val result = repository.reportWatch(ticket!!,segments,sample.position)) {
                     is Outcome.Success -> Unit
                     is Outcome.Failure -> message(sample,"Watch sync not confirmed (${result.error}); playback continues.")
                 }

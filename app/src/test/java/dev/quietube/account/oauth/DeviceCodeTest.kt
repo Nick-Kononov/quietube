@@ -1,13 +1,14 @@
 package dev.quietube.account.oauth
 
 import dev.quietube.account.AccountPageParser
+import dev.quietube.account.accountJson
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
 
 class DeviceCodeTest {
     private val config = TvClientConfiguration("fixture.apps.googleusercontent.com","FAKE_CLIENT_SECRET","7.fixture","FAKE_VISITOR")
-    private fun json(text: String) = oauthJson.parseToJsonElement(text).jsonObject
+    private fun json(text: String) = accountJson.parseToJsonElement(text).jsonObject
     @Test fun `pending slow down denial and expiry map without exposing response data`() {
         assertEquals(DevicePoll.Pending,DeviceCodeParser.poll(json("""{"error":"authorization_pending"}"""),config,0))
         assertEquals(DevicePoll.SlowDown,DeviceCodeParser.poll(json("""{"error":"slow_down"}"""),config,0))

@@ -1,5 +1,7 @@
 package dev.quietube.account
 
+import android.os.SystemClock
+import dev.quietube.account.oauth.TvOAuthClient
 import dev.quietube.data.Outcome
 import dev.quietube.data.VideoError
 import java.io.IOException
@@ -16,8 +18,11 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class AccountHttp
 internal class AccountFailure(val error: VideoError) : IOException()
+/** A response body with the session cookies as the response left them (YouTube rotates some on any request). */
+private class Fetched(val body: String, val cookies: SessionCookies)
+private class ConfigurationPage(val configuration: WebConfiguration, val cookies: SessionCookies)
 @Singleton
-class InnerTubeClient @Inject constructor(@AccountHttp private val http: OkHttpClient, private val sessions: EncryptedSessionStore, private val tv: dev.quietube.account.oauth.TvOAuthClient) {
+class InnerTubeClient @Inject constructor(@AccountHttp private val http: OkHttpClient, private val sessions: EncryptedSessionStore, private val tv: TvOAuthClient) {
     private val mutex = Mutex()
     @Volatile private var cached: WebConfiguration? = null
     @Volatile private var configuredAt = 0L
@@ -26,7 +31,7 @@ class InnerTubeClient @Inject constructor(@AccountHttp private val http: OkHttpC
     suspend fun validate(cookies: SessionCookies): Outcome<SessionCookies> = withContext(Dispatchers.IO) {
         try {
             val page = loadConfiguration(cookies)
-            if (page.first.loggedIn != true || !page.second.usable()) Outcome.Failure(VideoError.AuthExpired) else Outcome.Success(page.second)
+            if (page.configuration.loggedIn != true || !page.cookies.usable()) Outcome.Failure(VideoError.AuthExpired) else Outcome.Success(page.cookies)
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) { Outcome.Failure(errorFor(e)) }
     }
@@ -50,12 +55,12 @@ class InnerTubeClient @Inject constructor(@AccountHttp private val http: OkHttpC
         // clear() may null the shared field at any time; work from a local copy.
         val config = cached?.takeIf { revision == currentRevision && System.currentTimeMillis() - configuredAt <= 6 * 60 * 60 * 1000L }
             ?: loadConfiguration(cookies,currentRevision).let { page ->
-                cookies = page.second
-                cached = page.first; configuredAt = System.currentTimeMillis(); revision = currentRevision
-                page.first
+                cookies = page.cookies
+                cached = page.configuration; configuredAt = System.currentTimeMillis(); revision = currentRevision
+                page.configuration
             }
         if (config.loggedIn != true) throw AccountFailure(if (config.loggedIn == false) VideoError.AuthExpired else VideoError.ExtractionBroken)
-        delay((1_000L - (android.os.SystemClock.elapsedRealtime() - lastRequest)).coerceAtLeast(0))
+        delay((1_000L - (SystemClock.elapsedRealtime() - lastRequest)).coerceAtLeast(0))
         currentCoroutineContext().ensureActive()
         if (sessions.status.value.revision != currentRevision) throw AccountFailure(VideoError.AuthExpired)
         val client = JsonObject((config.context.obj("client") ?: JsonObject(emptyMap())).toMutableMap().apply {
@@ -68,8 +73,8 @@ class InnerTubeClient @Inject constructor(@AccountHttp private val http: OkHttpC
         }
         val request = authenticated(Request.Builder().url("$ORIGIN/youtubei/v1/$endpoint?prettyPrint=false"), cookies, config)
             .post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType())).build()
-        lastRequest = android.os.SystemClock.elapsedRealtime()
-        val result = execute(request,cookies,currentRevision).first
+        lastRequest = SystemClock.elapsedRealtime()
+        val result = execute(request,cookies,currentRevision).body
         currentCoroutineContext().ensureActive()
         if (sessions.status.value.revision != currentRevision) throw AccountFailure(VideoError.AuthExpired)
         val json = accountJson.parseToJsonElement(result).jsonObject
@@ -79,11 +84,11 @@ class InnerTubeClient @Inject constructor(@AccountHttp private val http: OkHttpC
         if (code != null) throw AccountFailure(if (code == 401 || code == 403) VideoError.AuthExpired else VideoError.ContentUnavailable)
         json
     } }
-    private suspend fun loadConfiguration(cookies: SessionCookies, expectedRevision: Long? = null): Pair<WebConfiguration,SessionCookies> {
+    private suspend fun loadConfiguration(cookies: SessionCookies, expectedRevision: Long? = null): ConfigurationPage {
         val request = Request.Builder().url("$ORIGIN/").header("User-Agent", USER_AGENT)
             .header("Cookie", cookies.header()).header("Accept-Language", "en-US,en;q=0.9").build()
         val page = execute(request,cookies,expectedRevision)
-        return WebConfigurationParser.parse(page.first) to page.second
+        return ConfigurationPage(WebConfigurationParser.parse(page.body), page.cookies)
     }
     private fun authenticated(builder: Request.Builder, cookies: SessionCookies, config: WebConfiguration): Request.Builder {
         builder.header("Cookie", cookies.header()).header("User-Agent", USER_AGENT)
@@ -95,7 +100,7 @@ class InnerTubeClient @Inject constructor(@AccountHttp private val http: OkHttpC
         config.delegatedSessionId?.let { builder.header("X-Goog-PageId", it) }
         return builder
     }
-    private suspend fun execute(request: Request, cookies: SessionCookies, expectedRevision: Long? = null): Pair<String,SessionCookies> = http.newCall(request).await().use { response ->
+    private suspend fun execute(request: Request, cookies: SessionCookies, expectedRevision: Long? = null): Fetched = http.newCall(request).await().use { response ->
         currentCoroutineContext().ensureActive()
         val updated = if (expectedRevision == null) cookies.updated(response.headers.values("Set-Cookie"))
             else sessions.applyResponseCookies(expectedRevision,response.headers.values("Set-Cookie")) ?: throw AccountFailure(VideoError.AuthExpired)
@@ -105,7 +110,7 @@ class InnerTubeClient @Inject constructor(@AccountHttp private val http: OkHttpC
             response.code == 404 -> throw AccountFailure(VideoError.ContentUnavailable)
             !response.isSuccessful -> throw AccountFailure(VideoError.Network)
         }
-        (response.body?.string() ?: throw AccountFailure(VideoError.ExtractionBroken)) to updated
+        Fetched(response.body?.string() ?: throw AccountFailure(VideoError.ExtractionBroken), updated)
     }
     fun clear() { http.dispatcher.cancelAll(); cached = null; configuredAt = 0; revision = -1 }
     companion object {

@@ -4,6 +4,7 @@ package dev.quietube.playback
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.os.Bundle
 import androidx.media3.common.*
@@ -18,7 +19,9 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.AndroidEntryPoint
 import dev.quietube.MainActivity
+import dev.quietube.account.EncryptedSessionStore
 import dev.quietube.data.*
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.update
@@ -26,7 +29,7 @@ import okhttp3.OkHttpClient
 
 @AndroidEntryPoint
 class PlaybackService : MediaSessionService() {
-    @Inject lateinit var sessions: dev.quietube.account.EncryptedSessionStore
+    @Inject lateinit var sessions: EncryptedSessionStore
     @Inject lateinit var repository: VideoRepository
     @Inject lateinit var store: PlaybackStateStore
     @Inject lateinit var positions: ResumeDao
@@ -45,13 +48,13 @@ class PlaybackService : MediaSessionService() {
     /** One writer keeps resume saves in order; parallel IO could commit an older position last. */
     private val positionWriter = Dispatchers.IO.limitedParallelism(1)
     private val metrics: PlaybackMetrics? by lazy {
-        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) PlaybackMetrics() else null
+        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) PlaybackMetrics() else null
     }
 
     override fun onCreate() {
         super.onCreate()
         // Chunks are megabytes long: keep the connect/read timeouts but drop the whole-call limit, which would cut slow links mid-chunk.
-        val streaming = http.newBuilder().callTimeout(0, java.util.concurrent.TimeUnit.SECONDS).build()
+        val streaming = http.newBuilder().callTimeout(0, TimeUnit.SECONDS).build()
         sources = DefaultMediaSourceFactory(ChunkedDataSource.Factory(OkHttpDataSource.Factory(streaming).setUserAgent(ExtractorDownloader.USER_AGENT).setTransferListener(metrics)))
         player = ExoPlayer.Builder(this).setMediaSourceFactory(sources).build().apply {
             setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
@@ -134,6 +137,8 @@ class PlaybackService : MediaSessionService() {
             }
         }
         history.start(scope)
+        // A save adds at most one row per video, so trimming old rows once per service start keeps the table bounded.
+        scope.launch(positionWriter) { positions.prune() }
         ticker = scope.launch {
             var tick = 0
             while (isActive) {
@@ -209,7 +214,6 @@ class PlaybackService : MediaSessionService() {
         val position = resumablePosition(player.currentPosition, player.duration)
         return scope.launch(positionWriter) {
             positions.save(ResumePosition(current.video.url, position, System.currentTimeMillis()))
-            positions.prune()
         }
     }
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session

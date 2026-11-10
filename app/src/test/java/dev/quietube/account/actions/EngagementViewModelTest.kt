@@ -21,9 +21,10 @@ class EngagementViewModelTest {
     @Before fun setup() { Dispatchers.setMain(dispatcher) }
     @After fun teardown() { Dispatchers.resetMain() }
     private fun video(id: String) = Video("https://www.youtube.com/watch?v=$id",id,"Channel",null,60,0,null)
+    private var estimate: String? = null
     private suspend fun TestScope.model(): EngagementViewModel {
         playback.mutable.value = PlaybackState(video = video("aaaaaaaaaaa"))
-        val vm = EngagementViewModel(repo,sessions,playback,preferences,{ null },{}, {})
+        val vm = EngagementViewModel(repo,sessions,playback,preferences,{ estimate },{}, {})
         runCurrent()
         return vm
     }
@@ -151,6 +152,32 @@ class EngagementViewModelTest {
         vm.refresh(); advanceUntilIdle()
         assertEquals(2,count)
     }
+    @Test fun `changing a sync setting keeps the loaded account details`() = runTest(dispatcher) {
+        val vm = model()
+        vm.rate(Rating.Like); advanceUntilIdle()
+        preferences.value = SyncSettings(history = false); advanceUntilIdle()
+        assertEquals(1,repo.engagements)
+        assertEquals(Rating.Like,vm.state.value.info.rating)
+        assertFalse(vm.state.value.settings.history)
+    }
+    @Test fun `estimates load without waiting for the account and survive its answer`() = runTest(dispatcher) {
+        estimate = "42"; preferences.value = SyncSettings(dislikeEstimates = true); repo.delayMs = 5_000
+        val vm = model()
+        assertEquals("42",vm.state.value.info.dislikes); assertTrue(vm.state.value.busy)
+        advanceUntilIdle()
+        assertEquals("42",vm.state.value.info.dislikes); assertTrue(vm.state.value.info.estimatedDislikes)
+        assertEquals("10",vm.state.value.info.likes)
+    }
+    @Test fun `switching estimates on and off needs no account request`() = runTest(dispatcher) {
+        estimate = "42"
+        val vm = model()
+        assertNull(vm.state.value.info.dislikes)
+        preferences.value = SyncSettings(dislikeEstimates = true); advanceUntilIdle()
+        assertEquals("42",vm.state.value.info.dislikes); assertTrue(vm.state.value.info.estimatedDislikes)
+        preferences.value = SyncSettings(); advanceUntilIdle()
+        assertNull(vm.state.value.info.dislikes); assertFalse(vm.state.value.info.estimatedDislikes)
+        assertEquals(1,repo.engagements)
+    }
     @Test fun `formatted or missing like totals are preserved`() {
         val change = EngagementChange.Rate("url",1,Rating.Like)
         assertEquals("1.2K",change.optimistic(Engagement(likes = "1.2K")).likes)
@@ -162,7 +189,9 @@ class EngagementViewModelTest {
         var slow = false
         val ratings = mutableListOf<Pair<Rating,Rating>>()
         val subscriptions = mutableListOf<Boolean>()
-        override suspend fun engagement(url: String) = Outcome.Success(info)
+        var engagements = 0
+        var delayMs = 0L
+        override suspend fun engagement(url: String): Outcome<Engagement> { engagements++; delay(delayMs); return Outcome.Success(info) }
         override suspend fun rate(url: String,rating: Rating,previous: Rating): Outcome<Unit> {
             ratings += rating to previous
             if (slow) withContext(NonCancellable) { delay(1000) }

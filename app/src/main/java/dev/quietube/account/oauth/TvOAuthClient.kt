@@ -7,6 +7,8 @@ import dagger.hilt.components.SingletonComponent
 import dev.quietube.account.EncryptedSessionStore
 import dev.quietube.account.AccountFailure
 import dev.quietube.account.InnerTubeClient
+import dev.quietube.account.accountJson
+import dev.quietube.account.str
 import dev.quietube.account.await
 import dev.quietube.data.VideoError
 import javax.inject.Inject
@@ -122,7 +124,7 @@ class TvOAuthClient @Inject constructor(@TvHttp private val http: OkHttpClient,p
             put("client_id",session.configuration.clientId); put("client_secret",session.configuration.clientSecret)
             put("refresh_token",session.refreshToken); put("grant_type","refresh_token")
         },allowOAuthError = true)
-        if (result.string("error") != null) throw AccountFailure(VideoError.AuthExpired)
+        if (result.str("error") != null) throw AccountFailure(VideoError.AuthExpired)
         (DeviceCodeParser.poll(result,session.configuration,System.currentTimeMillis(),session.refreshToken) as? DevicePoll.Granted)?.session
             ?: throw AccountFailure(VideoError.AuthExpired)
     }
@@ -155,10 +157,10 @@ class TvOAuthClient @Inject constructor(@TvHttp private val http: OkHttpClient,p
         bearer?.let {
             builder.header("Authorization","Bearer $it").header("X-Youtube-Client-Name","7").header("X-Goog-AuthUser","0")
             val client = (body["context"] as? JsonObject)?.get("client") as? JsonObject
-            client?.string("clientVersion")?.let { version -> builder.header("X-Youtube-Client-Version",version) }
-            client?.string("visitorData")?.let { visitor -> builder.header("X-Goog-Visitor-Id",visitor) }
+            client?.str("clientVersion")?.let { version -> builder.header("X-Youtube-Client-Version",version) }
+            client?.str("visitorData")?.let { visitor -> builder.header("X-Goog-Visitor-Id",visitor) }
         }
-        return oauthJson.parseToJsonElement(execute(builder.post(body.toString().toRequestBody("application/json".toMediaType())).build(),allowOAuthError)).jsonObject
+        return accountJson.parseToJsonElement(execute(builder.post(body.toString().toRequestBody("application/json".toMediaType())).build(),allowOAuthError)).jsonObject
     }
     private suspend fun execute(request: Request,allowOAuthError: Boolean): String = http.newCall(request).await().use { response ->
         currentCoroutineContext().ensureActive()

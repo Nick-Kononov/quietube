@@ -1,6 +1,9 @@
 package dev.quietube.account.actions
 
+import dev.quietube.account.objects
+import dev.quietube.account.str
 import dev.quietube.data.Rating
+import dev.quietube.data.WatchSegment
 import dev.quietube.playback.*
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
@@ -13,6 +16,13 @@ class ActionParserTest {
         assertEquals(Rating.Like,info.rating); assertEquals("123K",info.likes)
         assertEquals(true,info.subscribed); assertNull(info.dislikes)
         assertEquals("UCabcdefghijklmnopqrstuv",info.channelId)
+    }
+    @Test fun objectsAreVisitedParentsFirstInDocumentOrderAndRunawayNestingStops() {
+        val tree = Json.parseToJsonElement("""{"n":1,"a":{"n":2,"b":[{"n":3},[{"n":4}]]},"c":{"n":5}}""")
+        assertEquals(listOf("1","2","3","4","5"),tree.objects().map { it.str("n") }.toList())
+        var deep: JsonElement = buildJsonObject { put("leaf",true) }
+        repeat(200) { deep = buildJsonObject { put("child",deep) } }
+        assertEquals(81,deep.objects().count())
     }
     @Test fun profileUsesTheSelectedAccountAndItsLargestPhoto() {
         val response = Json.parseToJsonElement("""{"responseContext":{},"contents":[{"accountSectionListRenderer":{"contents":[{"accountItemSectionRenderer":{"contents":[
@@ -40,7 +50,7 @@ class ActionParserTest {
     }
     @Test fun trackingKeepsSignedFieldsAndRealIntervals() {
         val urls = ActionParser.tracking(fixture("player"))
-        val url = ActionParser.trackingUrl(urls.second,"abcdefghijklmnop",54.5,listOf(0.0 to 4.5,50.0 to 54.5))
+        val url = ActionParser.trackingUrl(urls.watchtime,"abcdefghijklmnop",54.5,listOf(WatchSegment(0.0,4.5),WatchSegment(50.0,54.5)))
         assertEquals("fixture",url.queryParameter("vm")); assertEquals("fixture",url.queryParameter("of"))
         assertEquals("0.000,50.000",url.queryParameter("st")); assertEquals("4.500,54.500",url.queryParameter("et"))
         assertEquals("54.500",url.queryParameter("cmt")); assertNull(url.queryParameter("final"))
@@ -53,9 +63,9 @@ class ActionParserTest {
         }
     }
     @Test fun invalidIntervalsRejected() {
-        val base = ActionParser.tracking(fixture("player")).second
+        val base = ActionParser.tracking(fixture("player")).watchtime
         assertThrows(IllegalArgumentException::class.java) { ActionParser.trackingUrl(base,"abcdefghijklmnop",Double.NaN) }
-        assertThrows(IllegalArgumentException::class.java) { ActionParser.trackingUrl(base,"abcdefghijklmnop",2.0,listOf(10.0 to 2.0)) }
+        assertThrows(IllegalArgumentException::class.java) { ActionParser.trackingUrl(base,"abcdefghijklmnop",2.0,listOf(WatchSegment(10.0,2.0))) }
     }
     @Test fun emptyOrRejectedActionsAreNotSuccess() {
         for (body in listOf("{}", "{\"responseContext\":{},\"error\":{}}", "{\"responseContext\":{},\"actions\":[{\"status\":\"STATUS_FAILED\"}]}"))
@@ -67,17 +77,17 @@ class ActionParserTest {
     @Test fun contiguousPlayingIntervalsMerge() {
         val intervals = WatchedIntervals()
         intervals.sample(sample(0.0,0)); intervals.sample(sample(1.0,1000)); intervals.sample(sample(2.0,2000,false))
-        assertEquals(listOf(0.0 to 2.0),intervals.drain()); assertTrue(intervals.drain().isEmpty())
+        assertEquals(listOf(WatchSegment(0.0,2.0)),intervals.drain()); assertTrue(intervals.drain().isEmpty())
     }
     @Test fun seeksDoNotMarkSkippedRangesWatched() {
         val intervals = WatchedIntervals()
         intervals.sample(sample(0.0,0)); intervals.sample(sample(1.0,1000)); intervals.sample(sample(90.0,1500,seek = true)); intervals.sample(sample(91.0,2500))
-        assertEquals(listOf(0.0 to 1.0,90.0 to 91.0),intervals.drain())
+        assertEquals(listOf(WatchSegment(0.0,1.0),WatchSegment(90.0,91.0)),intervals.drain())
     }
     @Test fun pausesAndBufferingDoNotAccumulate() {
         val intervals = WatchedIntervals()
         intervals.sample(sample(0.0,0,false)); intervals.sample(sample(5.0,10000,false)); intervals.sample(sample(5.0,15000)); intervals.sample(sample(6.0,16000))
-        assertEquals(listOf(5.0 to 6.0),intervals.drain())
+        assertEquals(listOf(WatchSegment(5.0,6.0)),intervals.drain())
     }
     @Test fun revisionAndDisabledSamplesNeverBridge() {
         val intervals = WatchedIntervals()
@@ -87,6 +97,6 @@ class ActionParserTest {
     @Test fun backwardSeekDoesNotMergeSeparatePlayback() {
         val intervals = WatchedIntervals()
         intervals.sample(sample(10.0,0)); intervals.sample(sample(11.0,1000)); intervals.sample(sample(2.0,1500,seek = true)); intervals.sample(sample(3.0,2500))
-        assertEquals(listOf(10.0 to 11.0,2.0 to 3.0),intervals.drain())
+        assertEquals(listOf(WatchSegment(10.0,11.0),WatchSegment(2.0,3.0)),intervals.drain())
     }
 }
