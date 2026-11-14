@@ -1061,3 +1061,48 @@ was built and signed successfully. No
 on-device checks or device tests were run; the emulator-control and device-test
 execution paths remain unchecked. The installed app was not changed and no
 release was published.
+
+## Remaining dependency vulnerability fixes
+
+After the critical build-tool fixes reached main, GitHub reported six remaining
+alerts: three high and three medium. The existing settings-level rules now also
+patch Guava to 33.7.2 (CVE-2026-102554), jose4j to 0.9.6 (CVE-2024-29371),
+JDOM to 2.0.6.1 (CVE-2021-33813), Commons Lang to 3.18.0 (CVE-2025-48924) and
+Apache HttpClient to 4.5.14 (CVE-2020-13956). The tool configurations previously
+resolved multiple versions of Guava and HttpClient; every configuration must
+be covered, not only the root plugin classpath.
+
+Guava is also a Media3 runtime dependency. Its rule preserves the Android
+variant for Android requests and the JRE variant for build tools. The other
+four libraries are tooling dependencies: bundletool uses jose4j, Jetifier uses
+JDOM, SDK tooling uses Commons Lang and the Android tool libraries use Apache
+HttpClient. Nothing adds an app network destination, logging or account data
+access, and existing privacy restrictions remain in place.
+
+The remaining Kotlin build-cache deserialization alert (CVE-2026-53914)
+requires a compiler/toolchain upgrade. Compose and serialization compiler
+plugins now use stable Kotlin 2.4.20 together, which also selects the matching
+Kotlin Gradle plugin over AGP's transitive 2.2.10. AGP remains 9.2.1 and the
+wrapper remains 9.4.1, within Kotlin 2.4.20's documented compatibility range.
+No prerelease compiler or additional plugin was introduced.
+
+Kotlin 2.4 makes the existing annotation default-target option redundant; it
+was removed while retaining the same default. Its improved null analysis also
+allowed removing an unnecessary assertion in the direct-cast sample selection
+and unnecessary safe calls on the extractor's non-null description text.
+Description handling still accepts a missing description and filters blank
+text, as pinned by the existing unit tests.
+
+Local generation with the CI graph plugin confirmed patched versions for all
+six affected packages and preserved the Bouncy Castle/Netty critical fixes.
+The release runtime report selected Guava's Android runtime variant at
+33.7.2-android. The graph was not submitted and no alerts were dismissed;
+GitHub can close alerts after the patched main graph is submitted.
+
+Final verification: `assembleDebug testDebugUnitTest lintDebug assembleRelease`
+passed, including all 163 unit tests with no failures. The final compilation
+reported no compiler warnings, and lint retained the same 41 warnings (21 code
+findings and 20 dependency-update notices), with no errors or new findings.
+The optimized APK built and signed successfully. No device was connected, so
+on-device playback, casting and device-tooling checks were not run. No APK was
+installed and no release was published.
