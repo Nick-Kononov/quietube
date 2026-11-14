@@ -8,6 +8,7 @@ import dev.quietube.account.str
 import dev.quietube.data.*
 import dev.quietube.links.CHANNEL_ID
 import dev.quietube.links.VIDEO_ID
+import java.util.Locale
 import kotlinx.serialization.json.*
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -89,7 +90,7 @@ object ActionParser {
     fun trackingUrl(base: HttpUrl, cpn: String, position: Double, segments: List<WatchSegment> = emptyList()): HttpUrl {
         require(PLAYBACK_NONCE.matches(cpn) && position.isFinite() && position >= 0)
         require(segments.all { it.start.isFinite() && it.end.isFinite() && it.start >= 0 && it.end >= it.start })
-        fun number(value: Double) = java.lang.String.format(java.util.Locale.US, "%.3f", value)
+        fun number(value: Double) = java.lang.String.format(Locale.US, "%.3f", value)
         return base.newBuilder().setQueryParameter("ver", "2").setQueryParameter("cpn", cpn)
             .setQueryParameter("cmt", number(position)).setQueryParameter("el", "detailpage")
             .apply {

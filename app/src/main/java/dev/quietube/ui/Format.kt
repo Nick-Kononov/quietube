@@ -1,6 +1,11 @@
 package dev.quietube.ui
 
+import dev.quietube.data.Video
 import dev.quietube.data.VideoError
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+import java.time.format.FormatStyle
 import java.util.Locale
 
 internal fun formatDuration(seconds: Long): String? = when {
@@ -38,11 +43,11 @@ internal fun watchedFraction(positionMs: Long?, durationSeconds: Long, live: Boo
     val fraction = (positionMs.toDouble() / durationSeconds / 1000).coerceIn(0.0, 1.0)
     return when { fraction < .02 -> null; fraction >= .95 -> 1f; else -> fraction.toFloat() }
 }
-internal fun videoLabel(video: dev.quietube.data.Video): String = listOfNotNull(video.title, video.channel.takeIf(String::isNotBlank),
+internal fun videoLabel(video: Video): String = listOfNotNull(video.title, video.channel.takeIf(String::isNotBlank),
     if (video.isLive) "Live" else formatDuration(video.durationSeconds), formatViews(video.viewCount), video.published,
     watchedFraction(video.resumePositionMs, video.durationSeconds, video.isLive)?.let { "${(it * 100).toInt()} percent watched" }).joinToString(", ")
 
 internal fun formatPublishedDate(value: String?, locale: Locale = Locale.getDefault()): String? = value?.let {
-    try { java.time.LocalDate.parse(it.take(10)).format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM).withLocale(locale)) }
-    catch (_: java.time.format.DateTimeParseException) { it }
+    try { LocalDate.parse(it.take(10)).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)) }
+    catch (_: DateTimeParseException) { it }
 }

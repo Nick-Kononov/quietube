@@ -1,6 +1,7 @@
 package dev.quietube.data
 
 import dev.quietube.account.EncryptedSessionStore
+import dev.quietube.playback.ResumeDao
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -10,7 +11,7 @@ class DefaultVideoRepository @Inject constructor(
     private val anonymous: AnonymousSource,
     private val account: AccountSource,
     private val sessions: EncryptedSessionStore,
-    private val positions: dev.quietube.playback.ResumeDao,
+    private val positions: ResumeDao,
     private val playbackCache: PlaybackPrefetcher,
 ) : VideoRepository {
     override suspend fun comments(url: String,continuation: Continuation?) = anonymous.comments(url,continuation)

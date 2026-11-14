@@ -1,5 +1,6 @@
 package dev.quietube.account.oauth
 
+import android.os.SystemClock
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -86,10 +87,10 @@ class TvOAuthClient @Inject constructor(@TvHttp private val http: OkHttpClient,p
     }
     suspend fun request(endpoint: String,payload: JsonObject): JsonObject = withContext(Dispatchers.IO) { browseMutex.withLock {
         val (session,revision) = currentSession()
-        delay((1000-(android.os.SystemClock.elapsedRealtime()-lastBrowse)).coerceAtLeast(0))
+        delay((1000-(SystemClock.elapsedRealtime()-lastBrowse)).coerceAtLeast(0))
         currentCoroutineContext().ensureActive()
         if (sessions.status.value.revision != revision) throw AccountFailure(VideoError.AuthExpired)
-        lastBrowse = android.os.SystemClock.elapsedRealtime()
+        lastBrowse = SystemClock.elapsedRealtime()
         val result = requestApi(endpoint,payload,session)
         currentCoroutineContext().ensureActive()
         if (sessions.status.value.revision != revision) throw AccountFailure(VideoError.AuthExpired)

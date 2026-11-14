@@ -1,5 +1,6 @@
 package dev.quietube.cast
 
+import android.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -11,6 +12,7 @@ import android.content.pm.ServiceInfo
 import android.net.wifi.WifiManager
 import android.os.IBinder
 import android.os.PowerManager
+import androidx.core.app.ServiceCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -28,11 +30,11 @@ class StreamService : Service() {
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "Playing on TV", NotificationManager.IMPORTANCE_LOW))
         val stop = PendingIntent.getService(this, 0, Intent(this, StreamService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE)
-        val notification = Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_media_play)
+        val notification = Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_media_play)
             .setContentTitle("Playing on ${intent?.getStringExtra(EXTRA_TV) ?: "TV"}")
             .setContentText("This phone is streaming the video. Keep it on the same Wi-Fi.")
             .addAction(Notification.Action.Builder(null, "Stop", stop).build()).setOngoing(true).build()
-        androidx.core.app.ServiceCompat.startForeground(this, NOTIFICATION, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        ServiceCompat.startForeground(this, NOTIFICATION, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         if (wake == null) wake = getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "YouPoop:tv-stream").apply { acquire(4 * 60 * 60 * 1000L) }
         @Suppress("DEPRECATION") // The low-latency mode needs the screen on; high-perf is right for a background stream.

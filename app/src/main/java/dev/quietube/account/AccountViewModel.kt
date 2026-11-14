@@ -4,14 +4,27 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import coil3.SingletonImageLoader
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.quietube.account.actions.YouTubeActions
+import dev.quietube.account.oauth.DeviceLogin
+import dev.quietube.account.oauth.DevicePoll
+import dev.quietube.account.oauth.TvOAuthClient
 import dev.quietube.data.DefaultVideoRepository
 import dev.quietube.data.Outcome
 import dev.quietube.data.Profile
+import dev.quietube.data.VideoError
 import dev.quietube.playback.ResumeDao
+import dev.quietube.ui.AppearancePreferences
+import dev.quietube.ui.SearchHistory
+import dev.quietube.ui.ThemeMode
+import dev.quietube.ui.ThumbnailPrefetcher
+import java.io.ByteArrayOutputStream
+import java.io.IOException
 import javax.inject.Inject
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,23 +34,23 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.stateIn
 
 data class AccountUiState(val busy: Boolean = false,val message: String? = null,
-    val deviceLogin: dev.quietube.account.oauth.DeviceLogin? = null, val signingIn: Boolean = false)
+    val deviceLogin: DeviceLogin? = null, val signingIn: Boolean = false)
 @HiltViewModel
 class AccountViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val sessions: EncryptedSessionStore,
-    private val tv: dev.quietube.account.oauth.TvOAuthClient,
+    private val tv: TvOAuthClient,
     private val client: InnerTubeClient,
     private val source: InnerTubeAccountSource,
     private val repository: DefaultVideoRepository,
     private val positions: ResumeDao,
-    private val searchHistory: dev.quietube.ui.SearchHistory,
-    private val thumbnails: dev.quietube.ui.ThumbnailPrefetcher,
-    private val appearancePreferences: dev.quietube.ui.AppearancePreferences,
-    private val actions: dev.quietube.account.actions.YouTubeActions,
+    private val searchHistory: SearchHistory,
+    private val thumbnails: ThumbnailPrefetcher,
+    private val appearancePreferences: AppearancePreferences,
+    private val actions: YouTubeActions,
 ) : ViewModel() {
-    val appearance = appearancePreferences.settings.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, null)
-    fun themeMode(mode: dev.quietube.ui.ThemeMode) { viewModelScope.launch { appearancePreferences.mode(mode) } }
+    val appearance = appearancePreferences.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    fun themeMode(mode: ThemeMode) { viewModelScope.launch { appearancePreferences.mode(mode) } }
     fun wallpaper(enabled: Boolean) { viewModelScope.launch { appearancePreferences.wallpaper(enabled) } }
     val session = sessions.status
     private val mutable = MutableStateFlow(AccountUiState())
@@ -73,25 +86,25 @@ class AccountViewModel @Inject constructor(
                 var failures = 0
                 while (isActive && System.currentTimeMillis() < login.expiresAt) {
                     delay(interval*1000)
-                    val response = try { tv.poll(login) } catch (e: java.io.IOException) {
-                        if (e is AccountFailure && e.error != dev.quietube.data.VideoError.Network) throw e
+                    val response = try { tv.poll(login) } catch (e: IOException) {
+                        if (e is AccountFailure && e.error != VideoError.Network) throw e
                         failures++
                         if (failures >= 3) throw e
                         delay(15_000); continue
                     }
                     failures = 0
                     when (response) {
-                        dev.quietube.account.oauth.DevicePoll.Pending -> Unit
-                        dev.quietube.account.oauth.DevicePoll.SlowDown -> interval += 5
-                        dev.quietube.account.oauth.DevicePoll.Denied -> { mutable.value = AccountUiState(message = "Authorization was declined. No account session was saved."); return@launch }
-                        dev.quietube.account.oauth.DevicePoll.Expired -> { mutable.value = AccountUiState(message = "The device code expired. Request a new code."); return@launch }
-                        is dev.quietube.account.oauth.DevicePoll.Granted -> {
+                        DevicePoll.Pending -> Unit
+                        DevicePoll.SlowDown -> interval += 5
+                        DevicePoll.Denied -> { mutable.value = AccountUiState(message = "Authorization was declined. No account session was saved."); return@launch }
+                        DevicePoll.Expired -> { mutable.value = AccountUiState(message = "The device code expired. Request a new code."); return@launch }
+                        is DevicePoll.Granted -> {
                             mutable.value = AccountUiState(true,"Google approved. Testing authenticated Home…",signingIn = true)
                             stage = "checking authenticated Home"
                             val probe = tv.probe(response.session)
                             val home = withContext(Dispatchers.Default) { AccountPageParser.parse(probe) }
                             if (home.videos.isEmpty()) {
-                                mutable.value = AccountUiState(message = "Google approved sign-in, but the prototype could not read a nonempty Home feed. No replacement session was saved.")
+                                mutable.value = AccountUiState(message = "Google approved sign-in, but YouPoop could not read a nonempty Home feed. No replacement session was saved.")
                                 return@launch
                             }
                             stage = "checking token refresh"
@@ -134,7 +147,7 @@ class AccountViewModel @Inject constructor(
                 val expectedRevision = sessions.status.value.revision
                 val cookies = withContext(Dispatchers.IO) {
                     val text = context.contentResolver.openInputStream(uri)?.use { input ->
-                        val output = java.io.ByteArrayOutputStream()
+                        val output = ByteArrayOutputStream()
                         val buffer = ByteArray(8192)
                         while (output.size() <= 512_000) {
                             val count = input.read(buffer, 0, minOf(buffer.size, 512_001 - output.size()))
@@ -156,8 +169,8 @@ class AccountViewModel @Inject constructor(
                         else AccountUiState(message = "Session changed during import. Please try again.")
                     }
                     is Outcome.Failure -> mutable.value = AccountUiState(message = when(validation.error) {
-                        dev.quietube.data.VideoError.AuthExpired -> "This session is expired or not signed in. Export fresh cookies from youtube.com."
-                        dev.quietube.data.VideoError.Network -> "Could not reach YouTube. Check your connection and try again."
+                        VideoError.AuthExpired -> "This session is expired or not signed in. Export fresh cookies from youtube.com."
+                        VideoError.Network -> "Could not reach YouTube. Check your connection and try again."
                         else -> "YouTube could not verify this session. Try a fresh cookies.txt export."
                     })
                 }
@@ -181,8 +194,8 @@ class AccountViewModel @Inject constructor(
                 client.clear(); source.clear(); repository.clearLocalFeed()
                 positions.clear()
                 withContext(Dispatchers.IO) {
-                    coil3.SingletonImageLoader.get(context).memoryCache?.clear()
-                    coil3.SingletonImageLoader.get(context).diskCache?.clear()
+                    SingletonImageLoader.get(context).memoryCache?.clear()
+                    SingletonImageLoader.get(context).diskCache?.clear()
                 }
                 clearLoginData(context)
                 searchHistory.clear()

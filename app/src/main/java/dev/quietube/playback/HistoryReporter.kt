@@ -1,9 +1,11 @@
 package dev.quietube.playback
 
+import android.os.SystemClock
 import dev.quietube.account.EncryptedSessionStore
 import dev.quietube.account.actions.SyncPreferences
 import dev.quietube.data.*
 import javax.inject.Inject
+import kotlin.math.abs
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collect
@@ -22,7 +24,7 @@ class WatchedIntervals {
             if (old.url == value.url && old.revision == value.revision && old.playing && old.enabled && value.enabled && !value.discontinuity &&
                 delta > 0 && delta <= wall*old.speed+2.0 && value.position.isFinite()) {
                 val last = intervals.lastOrNull()
-                if (last != null && kotlin.math.abs(last.end-old.position) < 0.05) intervals[intervals.lastIndex] = last.copy(end = value.position)
+                if (last != null && abs(last.end-old.position) < 0.05) intervals[intervals.lastIndex] = last.copy(end = value.position)
                 else intervals.add(WatchSegment(old.position, value.position))
             }
         }
@@ -81,7 +83,7 @@ class HistoryReporter @Inject constructor(private val repository: VideoRepositor
     }
     fun sample(url: String?,position: Long,playing: Boolean,discontinuity: Boolean = false,speed: Float = 1f) {
         val session = sessions.status.value
-        samples.trySend(WatchSample(url,(position.coerceAtLeast(0)/1000.0),playing,android.os.SystemClock.elapsedRealtime(),session.revision,enabled && session.signedIn,discontinuity,speed))
+        samples.trySend(WatchSample(url,(position.coerceAtLeast(0)/1000.0),playing,SystemClock.elapsedRealtime(),session.revision,enabled && session.signedIn,discontinuity,speed))
     }
     fun finish(): Job? { samples.close(); return job }
 }

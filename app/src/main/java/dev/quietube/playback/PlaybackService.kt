@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.os.Bundle
+import android.os.Process
 import androidx.media3.common.*
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -96,7 +97,7 @@ class PlaybackService : MediaSessionService() {
         session = MediaSession.Builder(this, player).setSessionActivity(activity).setCallback(object : MediaSession.Callback {
             override fun onConnectAsync(session: MediaSession, controller: MediaSession.ControllerInfo): ListenableFuture<MediaSession.ConnectionResult> {
                 val builder = MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller)
-                if (controller.uid == android.os.Process.myUid()) builder.setAvailableSessionCommands(
+                if (controller.uid == Process.myUid()) builder.setAvailableSessionCommands(
                     MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
                         .add(SessionCommand(PLAY_VIDEO, Bundle.EMPTY)).add(SessionCommand(SET_QUALITY, Bundle.EMPTY))
                         .add(SessionCommand(CLOSE, Bundle.EMPTY)).build())
@@ -104,7 +105,7 @@ class PlaybackService : MediaSessionService() {
             }
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo,
                 customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
-                if (controller.uid != android.os.Process.myUid()) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
+                if (controller.uid != Process.myUid()) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
                 when (customCommand.customAction) {
                     PLAY_VIDEO -> {
                         val url = args.getString("url") ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))

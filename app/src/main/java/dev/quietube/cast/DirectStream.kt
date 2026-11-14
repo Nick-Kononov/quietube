@@ -13,6 +13,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.Locale
 import java.util.UUID
 import kotlin.concurrent.thread
 
@@ -187,12 +188,12 @@ internal class DirectStream(private val sources: DataSource.Factory, private val
             return (seconds * 1_000_000).toLong()
         }
 
-        fun npt(us: Long) = String.format(java.util.Locale.US, "%.3f", us / 1_000_000.0)
+        fun npt(us: Long) = String.format(Locale.US, "%.3f", us / 1_000_000.0)
 
         /** H:MM:SS.mmm, as DIDL durations and AVTransport seek targets expect. */
         fun clock(us: Long): String {
             val ms = us / 1000
-            return String.format(java.util.Locale.US, "%d:%02d:%02d.%03d", ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000)
+            return String.format(Locale.US, "%d:%02d:%02d.%03d", ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000)
         }
     }
 }

@@ -1,6 +1,7 @@
 package dev.quietube.links
 
 import java.net.URI
+import java.net.URISyntaxException
 import java.net.URLDecoder
 
 /** Shapes of YouTube's IDs; anything placed in a request is checked against them first. */
@@ -43,7 +44,7 @@ fun parseYouTubeLink(value: String): String? = try {
         if (id == null || !VIDEO_ID.matches(id) || times.size > 1 || (rawTime != null && time == null)) null
         else "https://www.youtube.com/watch?v=$id" + (time?.let { "&t=$it" } ?: "")
     }
-} catch (_: IllegalArgumentException) { null } catch (_: java.net.URISyntaxException) { null }
+} catch (_: IllegalArgumentException) { null } catch (_: URISyntaxException) { null }
 
 fun sharedYouTubeLink(text: String): String? = httpsUrl.findAll(text).mapNotNull { parseYouTubeLink(it.value.trimEnd('.', ',', ')', ']', '}', '!', ';')) }.firstOrNull()
 internal fun linkStartMs(canonical: String): Long? = canonical.substringAfter("&t=", "").toLongOrNull()?.let { Math.multiplyExact(it, 1000) }

@@ -4,7 +4,9 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.AtomicFile
+import androidx.annotation.VisibleForTesting
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.quietube.account.oauth.DeviceSession
 import java.io.File
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -29,7 +31,7 @@ class EncryptedSessionStore @Inject constructor(@ApplicationContext context: Con
     private val file = AtomicFile(File(context.noBackupFilesDir, "youtube-session.bin"))
     private val mutex = Mutex()
     private var credentials: SessionCookies? = null
-    private var deviceSession: dev.quietube.account.oauth.DeviceSession? = null
+    private var deviceSession: DeviceSession? = null
     private val mutableStatus = MutableStateFlow(SessionStatus())
     val status = mutableStatus.asStateFlow()
     private fun keyStore() = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -52,14 +54,14 @@ class EncryptedSessionStore @Inject constructor(@ApplicationContext context: Con
                 cipher.updateAAD(AAD)
                 val plain = cipher.doFinal(bytes.copyOfRange(13,bytes.size))
                 val text = try { plain.toString(Charsets.UTF_8) } finally { plain.fill(0) }
-                if (text.startsWith("{\"oauth\":")) { deviceSession = dev.quietube.account.oauth.DeviceSession.decode(text); null }
+                if (text.startsWith("{\"oauth\":")) { deviceSession = DeviceSession.decode(text); null }
                 else SessionCookies.decoded(text)
             }
         } catch (_: Exception) { file.delete(); keyStore().deleteEntry(alias); null }
         mutableStatus.value = SessionStatus(true,credentials != null || deviceSession != null,mutableStatus.value.revision+1,
             if (deviceSession != null) SessionMethod.DeviceCode else if (credentials != null) SessionMethod.Cookies else null)
     } }
-    suspend fun read(): SessionCookies? { initialize(); return mutex.withLock { credentials } }
+    @VisibleForTesting suspend fun read(): SessionCookies? { initialize(); return mutex.withLock { credentials } }
     class Snapshot(val cookies: SessionCookies, val revision: Long) { override fun toString() = "SessionSnapshot([redacted])" }
     suspend fun snapshot(): Snapshot? { initialize(); return mutex.withLock { credentials?.let { Snapshot(it,mutableStatus.value.revision) } } }
     private fun writeLocked(cookies: SessionCookies) { writeTextLocked(cookies.encoded()); credentials = cookies; deviceSession = null }
@@ -71,7 +73,7 @@ class EncryptedSessionStore @Inject constructor(@ApplicationContext context: Con
         val output = file.startWrite()
         try { output.write(bytes); file.finishWrite(output) } catch (e: Exception) { file.failWrite(output); throw e }
     }
-    suspend fun save(cookies: SessionCookies) = withContext(Dispatchers.IO) { mutex.withLock {
+    @VisibleForTesting suspend fun save(cookies: SessionCookies) = withContext(Dispatchers.IO) { mutex.withLock {
         writeLocked(cookies)
         mutableStatus.value = SessionStatus(true,true,mutableStatus.value.revision + 1,SessionMethod.Cookies)
     } }
@@ -81,14 +83,14 @@ class EncryptedSessionStore @Inject constructor(@ApplicationContext context: Con
         mutableStatus.value = SessionStatus(true,true,mutableStatus.value.revision + 1,SessionMethod.Cookies)
         true
     } }
-    class DeviceSnapshot(val session: dev.quietube.account.oauth.DeviceSession,val revision: Long) { override fun toString() = "DeviceSnapshot([redacted])" }
+    class DeviceSnapshot(val session: DeviceSession,val revision: Long) { override fun toString() = "DeviceSnapshot([redacted])" }
     suspend fun deviceSnapshot(): DeviceSnapshot? { initialize(); return mutex.withLock { deviceSession?.let { DeviceSnapshot(it,mutableStatus.value.revision) } } }
-    suspend fun saveDeviceIfRevision(session: dev.quietube.account.oauth.DeviceSession,expectedRevision: Long): Boolean = withContext(Dispatchers.IO) { mutex.withLock {
+    suspend fun saveDeviceIfRevision(session: DeviceSession,expectedRevision: Long): Boolean = withContext(Dispatchers.IO) { mutex.withLock {
         if (mutableStatus.value.revision != expectedRevision) return@withLock false
         writeTextLocked(session.encoded()); credentials = null; deviceSession = session
         mutableStatus.value = SessionStatus(true,true,mutableStatus.value.revision+1,SessionMethod.DeviceCode); true
     } }
-    suspend fun refreshDeviceIfRevision(session: dev.quietube.account.oauth.DeviceSession,expectedRevision: Long): Boolean = withContext(Dispatchers.IO) { mutex.withLock {
+    suspend fun refreshDeviceIfRevision(session: DeviceSession,expectedRevision: Long): Boolean = withContext(Dispatchers.IO) { mutex.withLock {
         if (mutableStatus.value.revision != expectedRevision || deviceSession == null) return@withLock false
         writeTextLocked(session.encoded()); deviceSession = session; true
     } }

@@ -1,9 +1,12 @@
 package dev.quietube.ui
 
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.PersistableBundle
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -27,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import dev.quietube.account.AccountUiState
 import dev.quietube.account.SessionMethod
 import dev.quietube.account.SessionStatus
+import dev.quietube.account.oauth.DeviceLogin
 import dev.quietube.data.Profile
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -87,7 +91,7 @@ private fun AccountAction(icon: ImageVector, title: String, body: String? = null
 }
 
 @Composable
-private fun DeviceLoginCard(pending: dev.quietube.account.oauth.DeviceLogin, cancel: () -> Unit) {
+private fun DeviceLoginCard(pending: DeviceLogin, cancel: () -> Unit) {
     val context = LocalContext.current
     Card(Modifier.fillMaxWidth().padding(20.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -96,13 +100,13 @@ private fun DeviceLoginCard(pending: dev.quietube.account.oauth.DeviceLogin, can
             Text("Google may call this YouTube on TV.", style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = {
                 val clip = ClipData.newPlainText("YouTube activation code", pending.userCode)
-                if (android.os.Build.VERSION.SDK_INT >= 33) clip.description.extras = android.os.PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
+                if (Build.VERSION.SDK_INT >= 33) clip.description.extras = PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
                 context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
             }) { Text("Copy activation code") }
             Button(onClick = {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(pending.verificationUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 try { context.startActivity(Intent(intent).setPackage("com.android.chrome")) }
-                catch (_: android.content.ActivityNotFoundException) { context.startActivity(intent) }
+                catch (_: ActivityNotFoundException) { context.startActivity(intent) }
             }) { Text("Open Google in Chrome") }
             TextButton(onClick = cancel) { Text("Cancel sign-in") }
         }

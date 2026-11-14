@@ -6,6 +6,7 @@ import android.content.Context
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.*
 import android.widget.Button
@@ -101,7 +102,7 @@ class WebLoginActivity : ComponentActivity() {
     override fun onDestroy() {
         browser?.let { web ->
             web.stopLoading(); web.clearHistory(); web.clearCache(true)
-            (web.parent as? android.view.ViewGroup)?.removeView(web); web.destroy()
+            (web.parent as? ViewGroup)?.removeView(web); web.destroy()
         }
         CookieManager.getInstance().removeAllCookies { CookieManager.getInstance().flush() }
         WebStorage.getInstance().deleteAllData()
