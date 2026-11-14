@@ -13,8 +13,8 @@ android {
         applicationId = "dev.quietube"
         minSdk = 26
         targetSdk = 37
-        versionCode = 22
-        versionName = "0.6.0"
+        versionCode = 23
+        versionName = "0.7.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
