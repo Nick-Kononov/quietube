@@ -31,6 +31,16 @@ YouTube session encrypted on the device. On the home screen the app is named
   is optional; successful history updates are silent.
 - **Comments and descriptions**, with optional dislike estimates from
   [Return YouTube Dislike](https://returnyoutubedislike.com/) (off by default).
+- **SponsorBlock and DeArrow** (both off by default): skip or mark sponsor
+  segments and other categories from [SponsorBlock](https://sponsor.ajay.app/),
+  with Undo, and replace clickbait titles with
+  [DeArrow](https://dearrow.ajay.app/)'s crowd-sourced ones (titles only).
+  Each request sends only a 4-character hash prefix of the video ID.
+- **Calm options** (all off by default): hide view and like counts, grey
+  thumbnails, a "You're all caught up" line in Subscriptions, and autoplay
+  with a 5-second Cancel that follows playlists and stops at their end.
+- **Card menu and shortcuts**: long-press a video to share or copy a clean
+  link; launcher shortcuts for Search and "Continue watching".
 - **Play on TV**: launches the video in a TV's YouTube app through DIAL/Lounge,
   or, as an experimental option, streams directly from the phone to a DLNA
   renderer with no ads.
