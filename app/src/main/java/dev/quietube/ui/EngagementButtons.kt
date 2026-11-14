@@ -26,6 +26,7 @@ import dev.quietube.data.Rating
 @Composable
 internal fun RatingButtons(engagement: EngagementState, publicLikes: Long?, rate: (Rating) -> Unit, signInToRate: () -> Unit = {}) {
     val hint by rememberUpdatedState(signInToRate)
+    val hideCounts = LocalCalm.current.hideLikes
     val enabled = engagement.signedIn && !engagement.busy && engagement.url != null
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         ButtonGroup(overflowIndicator = { menu -> ButtonGroupDefaults.OverflowIndicator(menu) }, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -33,7 +34,7 @@ internal fun RatingButtons(engagement: EngagementState, publicLikes: Long?, rate
                 val checked = engagement.info.rating == rating
                 val label = if (rating == Rating.Like) "Like" else "Dislike"
                 val actionLabel = if (checked) "Remove ${label.lowercase()}" else label
-                val count = if (rating == Rating.Like) displayLikeCount(engagement.info.likes, publicLikes) else displayDislikeCount(engagement.info.dislikes, engagement.info.estimatedDislikes)
+                val count = if (hideCounts) null else if (rating == Rating.Like) displayLikeCount(engagement.info.likes, publicLikes) else displayDislikeCount(engagement.info.dislikes, engagement.info.estimatedDislikes)
                 val click = { if (!engagement.signedIn) hint() else if (enabled) rate(rating) }
                 customItem(buttonGroupContent = {
                     val attempt = if (engagement.signedIn) Modifier else Modifier.pointerInput(Unit) {
@@ -48,9 +49,9 @@ internal fun RatingButtons(engagement: EngagementState, publicLikes: Long?, rate
                         shapes = if (index == 0) ButtonGroupDefaults.connectedLeadingButtonShapes() else ButtonGroupDefaults.connectedTrailingButtonShapes(),
                         modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = actionLabel },
                         icon = { Icon(if (rating == Rating.Like) { if (checked) Icons.Rounded.ThumbUp else Icons.Outlined.ThumbUp }
-                            else { if (checked) Icons.Rounded.ThumbDown else Icons.Outlined.ThumbDown }, null) }) { Text(count) }
+                            else { if (checked) Icons.Rounded.ThumbDown else Icons.Outlined.ThumbDown }, null) }) { if (count != null) Text(count) }
                     }
-                }, menuContent = { menu -> DropdownMenuItem(text = { Text("$actionLabel · $count") }, enabled = enabled || !engagement.signedIn, onClick = { menu.dismiss(); click() }) })
+                }, menuContent = { menu -> DropdownMenuItem(text = { Text(listOfNotNull(actionLabel, count).joinToString(" · ")) }, enabled = enabled || !engagement.signedIn, onClick = { menu.dismiss(); click() }) })
             }
         }
     }

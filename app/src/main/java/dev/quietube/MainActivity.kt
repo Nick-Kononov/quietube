@@ -12,6 +12,7 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Rational
 import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
@@ -25,8 +26,10 @@ import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -66,6 +69,7 @@ import dev.quietube.account.actions.EngagementViewModel
 import dev.quietube.cast.CastPlayer
 import dev.quietube.cast.CastViewModel
 import dev.quietube.data.AccountFeed
+import dev.quietube.data.TitleReplacements
 import dev.quietube.data.VideoRepository
 import dev.quietube.links.parseYouTubeLink
 import dev.quietube.links.sharedYouTubeLink
@@ -76,9 +80,11 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject lateinit var thumbnails: ThumbnailPrefetcher
+    @Inject lateinit var titleReplacements: TitleReplacements
     @Inject lateinit var videos: VideoRepository
     private var inPip by mutableStateOf(false)
     private var openPlayer by mutableStateOf(false)
+    private var openSearch by mutableStateOf(false)
     private var linkError by mutableStateOf<String?>(null)
     private var pendingVideo by mutableStateOf<String?>(null)
     private var pipEligible = false
@@ -197,6 +203,12 @@ class MainActivity : ComponentActivity() {
                 if (flying || !layerShown) sheet.show(true) else sheet.settle(scope, true)
                 playback.play(url)
             }
+            LaunchedEffect(openSearch) {
+                if (!openSearch) return@LaunchedEffect
+                if (sheet.expanded) sheet.settle(scope, false)
+                // A fresh search screen opens with its field expanded, even if search was already open on results.
+                nav.popBackStack("search", inclusive = true); nav.open("search"); openSearch = false
+            }
             LaunchedEffect(openPlayer, pendingVideo) {
                 pendingVideo?.let { playback.play(it); sheet.show(true); pendingVideo = null }
                 if (openPlayer) { sheet.settle(scope, true); openPlayer = false }
@@ -209,7 +221,11 @@ class MainActivity : ComponentActivity() {
             val covered by remember { derivedStateOf { sheet.fraction == 1f } }
             // Fully under the player, the app is neither drawn nor read out; a fading-in player still shows it.
             val hidden = playerOpen && covered && share.opening?.fade != true
-            CompositionLocalProvider(LocalPlayerShare provides share) {
+            val replacedTitles by titleReplacements.titles.collectAsStateWithLifecycle()
+            val titlesOn by titleReplacements.enabled.collectAsStateWithLifecycle()
+            val videoTitles = remember { VideoTitles({ replacedTitles }, { titlesOn }, titleReplacements::request) }
+            val calm by account.calm.collectAsStateWithLifecycle()
+            CompositionLocalProvider(LocalPlayerShare provides share, LocalVideoTitles provides videoTitles, LocalCalm provides calm) {
                 Box(Modifier.fillMaxSize().onSizeChanged { rootHeight = it.height }) {
                     AppNavigation(selectedTop, searchOpen, wideNavigation, selectTop, modifier = Modifier
                         .then(if (hidden) Modifier.clearAndSetSemantics {} else Modifier)
@@ -308,7 +324,9 @@ class MainActivity : ComponentActivity() {
             FeedScreen(shown, session,
                 search = { nav.open("search") }, account = { nav.open("account") },
                 refresh = { if (onTop()) feeds.refresh() },
-                more = { if (onTop() && feeds.state.value.feed == destination) feeds.more() }, play = play,
+                more = { if (onTop() && feeds.state.value.feed == destination) feeds.more() },
+                // From an open playlist, autoplay continues with the playlist's next videos.
+                play = { url -> shown.playlist?.let { playback.queueNext(shown.videos.dropWhile { it.url != url }.drop(1)) }; play(url) },
                 playlist = { if (onTop()) feeds.open(it) },
                 back = { if (shown.playlist != null) feeds.back() else nav.popBackStack() },
                 prefetch = { if (onTop()) videos.prefetch(it) },
@@ -347,7 +365,9 @@ class MainActivity : ComponentActivity() {
         SettingsScreen(settings, engagementState.settings, session.signedIn,
             version = remember { packageManager.getPackageInfo(packageName, 0).versionName.orEmpty() },
             back = { nav.popBackStack() }, themeMode = account::themeMode, wallpaper = account::wallpaper,
-            history = engagement::history, estimates = engagement::estimates, ambient = account::ambient, videoColours = account::videoColours)
+            history = engagement::history, estimates = engagement::estimates, ambient = account::ambient, videoColours = account::videoColours,
+            thirdParty = account.thirdParty.collectAsStateWithLifecycle().value, sponsorBlock = account::sponsorBlock, segmentMode = account::segmentMode,
+            deArrow = account::deArrow, calm = account.calm.collectAsStateWithLifecycle().value, calmOption = account::calm)
     }
 
     @Composable
@@ -366,6 +386,13 @@ class MainActivity : ComponentActivity() {
         val playing by playback.state.collectAsStateWithLifecycle()
         val controller by playback.controller.collectAsStateWithLifecycle()
         val connectionError by playback.connectionError.collectAsStateWithLifecycle()
+        // SponsorBlock's automatic skips, with Undo; a skip made while the app was hidden isn't announced late.
+        val skipped = playing.skipped
+        LaunchedEffect(skipped?.serial) {
+            if (skipped == null || SystemClock.elapsedRealtime() - skipped.atMs > 3_000) return@LaunchedEffect
+            if (snackbar.showSnackbar(skippedMessage(skipped.segment), "Undo", duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed)
+                playback.undoSkip(skipped.serial)
+        }
         val commentState by comments.state.collectAsStateWithLifecycle()
         val engagementState by engagement.state.collectAsStateWithLifecycle()
         val castState by casting.state.collectAsStateWithLifecycle()
@@ -382,6 +409,7 @@ class MainActivity : ComponentActivity() {
                     playback.state.value.video?.url?.let { url -> casting.cast(tv, url, current?.currentPosition ?: 0L, direct) { current?.pause() } }
                 })
         }
+        val upNext = remember(playback) { UpNextActions(playback::playNext, playback::cancelNext) }
         val commentActions = remember(comments) { CommentActions(comments::more, comments::refresh, comments::pullRefresh) }
         val engagementActions = remember(engagement) { EngagementActions(engagement::rate, engagement::subscribe, refresh = { engagement.refresh() }) }
         val window = remember(sheet, landscape, sheetVisible) {
@@ -395,7 +423,7 @@ class MainActivity : ComponentActivity() {
         PlayerLayer(sheet, dock, playing, shownPlayer, connectionError, inPip, commentState, commentActions, engagementState, engagementActions,
             window, appearance, settings = goSettings, quality = playback::quality, play = play, toggle = playback::toggle, close = playback::close,
             prefetch = { if (sheet.expanded) videos.prefetch(it) }, cast = castState, castActions = castActions, snackbar = snackbar,
-            thumbnailPrefetch = { if (sheet.expanded) thumbnails.submit(it) })
+            thumbnailPrefetch = { if (sheet.expanded) thumbnails.submit(it) }, upNext = upNext)
     }
 
     private fun NavController.open(route: String) = navigate(route) { launchSingleTop = true }
@@ -448,6 +476,8 @@ class MainActivity : ComponentActivity() {
             else { pendingVideo = url; openPlayer = true }
             return
         }
+        // The launcher's static Search shortcut.
+        if (value.action == ACTION_SEARCH) { openSearch = true; return }
         openPlayer = value.getBooleanExtra("open_player", false)
         // Explicit watch URL extra makes manual device smoke testing repeatable; debug builds only, since the
         // launcher activity is exported and other apps could otherwise start playback (and history reporting).
@@ -487,3 +517,5 @@ class MainActivity : ComponentActivity() {
         smoothRefresh.active(refreshResumed && !inPip)
     }
 }
+
+private const val ACTION_SEARCH = "dev.quietube.action.SEARCH"

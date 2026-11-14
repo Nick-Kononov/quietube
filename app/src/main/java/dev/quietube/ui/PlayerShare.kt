@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import dev.quietube.links.videoId
 
 /**
  * [decoded]: the card's loaded thumbnail, drawn as is so the flight shows it from its first frame.
@@ -61,7 +62,5 @@ internal val FlightBounds = BoundsTransform { _, _ -> tween(FLIGHT_MS, easing = 
 
 internal val LocalPlayerShare = staticCompositionLocalOf<PlayerShare?> { null }
 
-private val videoIdPattern = Regex("(?:[?&]v=|/shorts/|/live/|youtu\\.be/)([A-Za-z0-9_-]{11})")
-internal fun videoId(url: String?): String? = url?.let { videoIdPattern.find(it)?.groupValues?.get(1) }
 internal fun sameVideo(a: String?, b: String?): Boolean = a != null && b != null && (a == b || videoId(a)?.let { it == videoId(b) } == true)
 internal fun sharedThumbnailKey(url: String): String = "thumbnail:${videoId(url) ?: url}"

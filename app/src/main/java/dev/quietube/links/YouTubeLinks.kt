@@ -6,6 +6,10 @@ import java.net.URLDecoder
 
 /** Shapes of YouTube's IDs; anything placed in a request is checked against them first. */
 internal val VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")
+private val videoIdPattern = Regex("(?:[?&]v=|/shorts/|/live/|youtu\\.be/)([A-Za-z0-9_-]{11})")
+internal fun videoId(url: String?): String? = url?.let { videoIdPattern.find(it)?.groupValues?.get(1) }
+/** The plain watch link for sharing: no playlist, timestamp or tracking parameters. */
+internal fun shareableLink(url: String): String? = videoId(url)?.let { "https://www.youtube.com/watch?v=$it" }
 internal val CHANNEL_ID = Regex("UC[A-Za-z0-9_-]{22}")
 internal val PLAYLIST_ID = Regex("[A-Za-z0-9_-]{2,150}")
 private val digits = Regex("[0-9]+")

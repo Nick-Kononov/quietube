@@ -1249,3 +1249,128 @@ checked. The samples installation was removed afterwards and device settings
 were restored. Phase 7 has not started.
 
 Bumped versionCode from 21 to 22 and versionName to 0.6.0 for this release.
+
+## UI refresh — Phase 7, part 1: SponsorBlock and DeArrow
+
+Both are read-only, off by default, and switched on under Settings → Third-party
+services, which says what each one receives. They share `ThirdPartyHttp`, which
+follows the `DislikeEstimates` pattern: its own OkHttp client with
+`CookieJar.NO_COOKIES`, no redirects, a 10 s call timeout and a 512 KB body
+cap. Both send only the first four hex characters of the SHA-256 of a video
+ID, a bucket that many videos share, and pick the video out of the answer
+locally. Answers, including "nothing known", are cached in memory for 30
+minutes (SponsorBlock) or an hour (DeArrow); nothing is written to disk.
+Settings credits the data's CC BY-NC-SA 4.0 licence.
+
+SponsorBlock asks for every category on every request, so a request doesn't
+reveal which categories this viewer skips; the choices are applied locally.
+Each category can be Skip, Show only or Off. Sponsor defaults to Skip and the
+others to Show only, except filler, which defaults to Off because
+SponsorBlock's docs warn that it marks a lot. Skipping happens in
+`PlaybackService`, so it also works in the background, in PiP and from the
+lock screen. A 200 ms check runs only while playing with segments to skip. A
+segment is skipped only when playback runs into its start; seeking into one
+plays it. Skips land past any touching skipped segments. "Skipped sponsor ·
+Undo" appears in the app when the skip happened in the last 3 s, so a skip
+made in the background isn't announced late. Undo seeks back and lets that
+segment play for the rest of the video. Show-only segments offer a Skip
+button while the controls are hidden, and a TalkBack action. Live streams get
+no segments.
+
+Segments are marked over Media3's time bar, using SponsorBlock's familiar hues
+blended towards the theme's primary and set to one mid tone. Its yellow and
+cyan were otherwise near-white and invisible on the white played track. The
+marks leave a hole around the scrubber, which is tracked every frame while the
+controls show, without recomposing.
+
+DeArrow is titles only, as the owner chose: its thumbnails come from a server
+that receives each video's full ID. A title is used only when it's the first
+(best) entry and is locked or not voted down; an `original` entry keeps the
+uploader's title. The `>` keep-formatting markers are stripped, since there's
+no auto-formatter. Titles are requested as cards appear, three at a time, and
+applied to cards, the player title, the mini player and their accessibility
+labels. The description sheet shows the original title when it was replaced.
+The media notification keeps the original. Turning DeArrow off shows the
+originals again at once and stops all requests.
+
+Verification: `assembleDebug testDebugUnitTest lintDebug` and
+`assembleSamples` pass offline. All 198 JVM tests pass, 12 of them new. They
+cover parsing, hash prefixes, skip and chaining rules, defaults, MockWebServer
+checks (only the prefix in the path, all categories, no cookies, 404 as empty,
+redirects and oversized bodies refused, caching) and a test that no title is
+requested while DeArrow is off. Lint is unchanged at 33, none in new code.
+
+On the Pixel 8, using the signed-out samples installation, since removed:
+- **Auto-skip:** a video with a sponsor at 0–23 s jumped straight to 23.4 s and
+  showed "Skipped sponsor · Undo". Undo went back to 0 and played through.
+- **Show only:** self-promotion offered "Skip self-promotion", and the marks
+  sat at the right places.
+- **DeArrow:** replaced a search result's title, with "Original title: …" in
+  the description sheet.
+- **Both off:** no marks, no Skip button and original titles.
+
+A network capture wasn't possible over adb, so "no requests while off" rests
+on the unit test and the code paths (each request is gated on its setting).
+Part 2 (calm options, long-press menu, app shortcuts) has not started.
+
+## UI refresh — Phase 7, part 2: calm options, card menu, shortcuts
+
+**Calm options.** They live in their own DataStore (`calm`), all off by
+default, under Settings → Feed; Autoplay is under Playback. Hiding view counts
+covers cards, their TalkBack labels and the description sheet. Hiding like
+counts covers the rating buttons (icons only), dislike estimates and comment
+likes. Grey thumbnails apply a zero-saturation colour filter on cards only, so
+the opened video, its poster and the player's colours stay in colour.
+
+"You're all caught up" goes in Subscriptions above the newest video with
+local progress (any saved resume position, finished videos included). Nothing
+is shown when nothing has been watched.
+
+**Autoplay.** It runs in `PlaybackService`, so it also works with the screen
+off. When a video ends, an "Up next in N" card offers Cancel and Play now for
+5 seconds. Videos opened from an open playlist carry the rest of that playlist
+(watch URLs and titles, at most 200) to the service. Autoplay continues
+through the playlist and stops at its end rather than drifting into related
+videos. Elsewhere it takes the first related video that isn't live, a Short or
+the same video. Seeking back during the countdown cancels it, as does closing
+the player.
+
+**Card menu.** Long-pressing a card (TalkBack: "More options") opens Share
+and Copy link. Both use a plain `watch?v=` link without playlist, timestamp
+or tracking parameters. The sheet shows the original title when DeArrow
+replaced it. Below Android 13 a toast confirms the copy, since newer versions
+confirm copies themselves. Open channel, Watch Later and Not interested are
+left out because there's no channel page or account action behind them yet.
+
+**Shortcuts.**
+- **Search:** a static shortcut (`res/xml/shortcuts.xml`; the samples build
+  type has its own copy because static shortcuts name their package
+  literally). It collapses the player and opens a fresh, expanded search.
+- **Continue watching:** a dynamic shortcut for the last unfinished video,
+  updated alongside each resume save to Room. It's published once a video is
+  30 s in and removed when that video finishes, or at sign-out together with
+  the resume positions. It holds only the plain watch link and the title,
+  never a stream URL, and uses `pushDynamicShortcut`, which isn't
+  rate-limited in the background.
+
+Verification: `assembleDebug testDebugUnitTest lintDebug assembleSamples`
+pass offline. All 202 JVM tests pass, 4 of them new: caught-up placement,
+autoplay choice including the playlist end, share links and shortcut labels.
+Lint is unchanged at 33.
+
+On the Pixel 8, using the signed-out samples installation, since removed:
+- Grey thumbnails and hidden view and like counts.
+- The card menu; the share sheet showed the clean link.
+- Autoplay's countdown, Play now (automatic after 5 s, three videos in a row)
+  and Cancel.
+- The Search shortcut, after a fix: it had returned to old results rather than
+  an open search field.
+- The Continue watching shortcut appearing, resuming the video and
+  disappearing when the video finished.
+
+The shortcuts were fired with their exact intents through adb rather than from
+the launcher. Not checked on the device: the caught-up marker and the sign-out
+shortcut removal, which both need a signed-in account; TalkBack's long-press
+action; and autoplay through a playlist (covered by a unit test).
+
+Bumped versionCode from 22 to 23 and versionName to 0.7.0 for the Phase 7 release.

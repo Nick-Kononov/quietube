@@ -43,8 +43,8 @@ internal fun watchedFraction(positionMs: Long?, durationSeconds: Long, live: Boo
     val fraction = (positionMs.toDouble() / durationSeconds / 1000).coerceIn(0.0, 1.0)
     return when { fraction < .02 -> null; fraction >= .95 -> 1f; else -> fraction.toFloat() }
 }
-internal fun videoLabel(video: Video): String = listOfNotNull(video.title, video.channel.takeIf(String::isNotBlank),
-    if (video.isLive) "Live" else formatDuration(video.durationSeconds), formatViews(video.viewCount), video.published,
+internal fun videoLabel(video: Video, title: String = video.title, hideViews: Boolean = false): String = listOfNotNull(title, video.channel.takeIf(String::isNotBlank),
+    if (video.isLive) "Live" else formatDuration(video.durationSeconds), formatViews(video.viewCount).takeUnless { hideViews }, video.published,
     watchedFraction(video.resumePositionMs, video.durationSeconds, video.isLive)?.let { "${(it * 100).toInt()} percent watched" }).joinToString(", ")
 
 internal fun formatPublishedDate(value: String?, locale: Locale = Locale.getDefault()): String? = value?.let {

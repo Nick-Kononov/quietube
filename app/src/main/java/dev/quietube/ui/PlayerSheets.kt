@@ -70,10 +70,15 @@ internal fun DescriptionSheet(state: PlaybackState, engagement: EngagementState,
     dismiss: () -> Unit, quality: () -> Unit, settings: () -> Unit) {
     ModalBottomSheet(onDismissRequest = dismiss, sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(state.video?.title ?: "Video details", style = MaterialTheme.typography.titleLarge)
+            val title = state.video?.let { displayTitle(it.url, it.title) }
+            Text(title ?: "Video details", style = MaterialTheme.typography.titleLarge)
+            // DeArrow replaced the title; the uploader's own stays one look away.
+            state.video?.title?.takeIf { title != null && it != title }?.let {
+                SelectionContainer { Text("Original title: $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
             snackbar?.let { SnackbarHost(it) }
             Text(state.video?.channel.orEmpty(), style = MaterialTheme.typography.titleMedium)
-            state.video?.let { video -> Text(listOfNotNull(formatViews(video.viewCount), formatPublishedDate(video.published)).joinToString(" · "), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            state.video?.let { video -> Text(listOfNotNull(formatViews(video.viewCount).takeUnless { LocalCalm.current.hideViews }, formatPublishedDate(video.published)).joinToString(" · "), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             TextButton(onClick = quality, enabled = state.qualities.isNotEmpty()) {
                 Text(if (state.manualQuality == null) "Quality · Auto" else "Quality · ${state.manualQuality}p")
             }

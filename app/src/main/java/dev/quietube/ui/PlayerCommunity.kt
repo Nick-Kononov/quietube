@@ -90,7 +90,7 @@ private fun CommentCard(comment: Comment) {
                     overflow = TextOverflow.Ellipsis, onTextLayout = { clipped = it.hasVisualOverflow })
             }
             if (clipped || expanded) TextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(0.dp)) { Text(if (expanded) "Show less" else "Read more") }
-            Text(listOfNotNull(comment.likes?.let { "${formatLikeCount(it.toLong())} likes" }, if (comment.creatorHeart) "Creator heart" else null).joinToString(" · "),
+            Text(listOfNotNull(comment.likes?.takeUnless { LocalCalm.current.hideLikes }?.let { "${formatLikeCount(it.toLong())} likes" }, if (comment.creatorHeart) "Creator heart" else null).joinToString(" · "),
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="search" android:enabled="true" android:icon="@drawable/ic_shortcut_search"
+        android:shortcutShortLabel="@string/shortcut_search" android:shortcutLongLabel="@string/shortcut_search_long">
+        <!-- Static shortcuts name their package literally; the samples build type has its own copy. -->
+        <intent android:action="dev.quietube.action.SEARCH" android:targetPackage="dev.quietube.samples" android:targetClass="dev.quietube.MainActivity" />
+    </shortcut>
+</shortcuts>
