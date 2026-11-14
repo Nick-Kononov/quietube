@@ -1106,3 +1106,31 @@ findings and 20 dependency-update notices), with no errors or new findings.
 The optimized APK built and signed successfully. No device was connected, so
 on-device playback, casting and device-tooling checks were not run. No APK was
 installed and no release was published.
+
+## Dependency update PR review
+
+Reviewed the five initial Dependabot update PRs against the patched main branch.
+Kotlin's Compose and serialization compiler plugins move together from 2.4.20
+to the stable 2.4.21 maintenance release, within the existing AGP/Gradle
+compatibility range. Coroutines 1.11.0 fixes cancellation races and an R8
+optimization affecting `shareIn`/`stateIn`; its Android and test artifacts move
+together. Room's runtime, KTX and compiler move together to 2.8.5, including
+connection/Flow fixes. Its minimum SDK 23 remains below this app's 26. The
+regenerated database retains version 1, the same table definition and schema
+identity; no migration or destructive fallback was added.
+
+Coil 3.6.3 includes cache, cancellation and decoder fixes. Its minimum SDK 23
+also fits. The earlier PR failure used Kotlin 2.2 against Kotlin 2.4 metadata;
+the security update to Kotlin 2.4 removes that compiler mismatch. Its OkHttp
+integration still requests OkHttp 4.12.0, so the image update does not take the
+separate OkHttp 5 upgrade. Existing client, cache and prefetch configuration is
+unchanged; no integration or credential destination is added.
+
+The OkHttp 5.5.1 PR was held back. Its three cookie-rotation test failures were
+reproduced with current main merged into an isolated checkout. The Android
+variant cannot load the public-suffix list in plain JVM tests without Android
+platform initialization. This needs deliberate JVM/Android variant or test
+setup work before merging; it is not evidence that production cookie rotation
+is broken, and the authentication assertions were not weakened. No device was
+connected, so on-device playback, casting, database upgrade and image-loading
+checks were not run. No app release was published.
