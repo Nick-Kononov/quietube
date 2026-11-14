@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.quietube.account.accountJson
 import dev.quietube.links.VIDEO_ID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -13,9 +14,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.Serializable
 import okhttp3.CookieJar
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -34,6 +33,7 @@ class SyncPreferences @Inject constructor(@ApplicationContext private val contex
 @Singleton
 class DislikeEstimates @Inject constructor() {
     private class Cached(val at: Long, val dislikes: String)
+    @Serializable private class Votes(val dislikes: Long? = null)
     private val http = OkHttpClient.Builder().cookieJar(CookieJar.NO_COOKIES).followRedirects(false).followSslRedirects(false).callTimeout(10, TimeUnit.SECONDS).build()
     private val cache = ConcurrentHashMap<String, Cached>()
     suspend fun get(id: String): String? = withContext(Dispatchers.IO) {
@@ -47,8 +47,7 @@ class DislikeEstimates @Inject constructor() {
                 if (body.contentLength() > MAX_BODY) return@withContext null
                 val bytes = body.source().apply { request(MAX_BODY + 1) }.buffer
                 if (bytes.size > MAX_BODY) return@withContext null
-                val json = Json.parseToJsonElement(bytes.readUtf8()) as? JsonObject ?: return@withContext null
-                val dislikes = (json["dislikes"] as? JsonPrimitive)?.content?.toLongOrNull()?.takeIf { it >= 0 }?.toString() ?: return@withContext null
+                val dislikes = accountJson.decodeFromString(Votes.serializer(), bytes.readUtf8()).dislikes?.takeIf { it >= 0 }?.toString() ?: return@withContext null
                 if (cache.size > 100) cache.clear()
                 cache[id] = Cached(System.currentTimeMillis(), dislikes); dislikes
             }

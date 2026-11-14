@@ -961,3 +961,30 @@ same, so this is existing Material sheet behaviour rather than a regression,
 and nothing is orphaned. Not checked on the device: the sign-in and sign-out
 flows, the YouTube-app (Lounge) cast, and casting a second video over a
 running one.
+
+## Typed JSON for fixed-shape payloads (unreleased)
+
+A review suggested replacing hand-written JSON reading with annotated
+kotlinx.serialization classes. That was applied where the shape is fixed and
+either ours or a documented contract: the two encrypted session formats
+(cookies and the device-code session), the OAuth device-code and token
+responses, the Return YouTube Dislike response and the Lounge pairing token.
+This adds the Kotlin serialization compiler plugin (same version as Kotlin);
+the runtime library was already a dependency.
+
+The stored session formats are unchanged byte for byte, and tests pin them
+against strings written by earlier versions: a mismatch would have signed
+existing users out on upgrade. Decoding failures are rethrown without the
+library's message, which quotes the input and could otherwise carry a token
+into an exception. The classes are plain, not data classes, so they have no
+generated `toString()`.
+
+Deliberately not converted: the InnerTube parsers (`AccountPageParser`,
+`ActionParser`, `WebConfigurationParser`) search undocumented responses for
+known renderers at any depth and skip malformed items; fixed classes would
+make them fail whole pages when YouTube moves a field. Search history keeps
+its element-by-element filter for the same reason.
+
+Build, unit tests, lint and the R8 release build pass. This change was not
+installed on a device; the first launch after upgrading is the one to watch,
+since it reads the stored session through the new classes.

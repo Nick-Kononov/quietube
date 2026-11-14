@@ -9,6 +9,19 @@ import org.junit.Test
 class DeviceCodeTest {
     private val config = TvClientConfiguration("fixture.apps.googleusercontent.com", "FAKE_CLIENT_SECRET", "7.fixture", "FAKE_VISITOR")
     private fun json(text: String) = accountJson.parseToJsonElement(text).jsonObject
+    @Test fun `stored session written by earlier versions is read and rewritten unchanged`() {
+        val stored = """{"oauth":{"accessToken":"FAKE_ACCESS","refreshToken":"FAKE_REFRESH","expiresAt":1234567890123,"clientId":"fixture.apps.googleusercontent.com","clientSecret":"FAKE_CLIENT_SECRET","version":"7.fixture","visitor":"FAKE_VISITOR"}}"""
+        val session = DeviceSession.decode(stored)
+        assertEquals("FAKE_ACCESS", session.accessToken); assertEquals(1234567890123, session.expiresAt)
+        assertEquals("7.fixture", session.configuration.version)
+        assertEquals(stored, session.encoded()); assertTrue(session.encoded().startsWith("{\"oauth\":"))
+    }
+    @Test fun `token responses tolerate extra fields and a malformed one does not leak into the error`() {
+        val granted = DeviceCodeParser.poll(json("""{"access_token":"FAKE_ACCESS","token_type":"Bearer","refresh_token":"FAKE_REFRESH","expires_in":3600,"scope":"x","unknown":{"a":1}}"""), config, 0)
+        assertEquals("FAKE_ACCESS", (granted as DevicePoll.Granted).session.accessToken)
+        val error = assertThrows(IllegalArgumentException::class.java) { DeviceCodeParser.poll(json("""{"access_token":{"nested":"FAKE_SECRET"}}"""), config, 0) }
+        assertFalse(error.message.orEmpty().contains("FAKE_SECRET"))
+    }
     @Test fun `pending slow down denial and expiry map without exposing response data`() {
         assertEquals(DevicePoll.Pending, DeviceCodeParser.poll(json("""{"error":"authorization_pending"}"""), config, 0))
         assertEquals(DevicePoll.SlowDown, DeviceCodeParser.poll(json("""{"error":"slow_down"}"""), config, 0))

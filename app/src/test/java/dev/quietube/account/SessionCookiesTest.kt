@@ -4,6 +4,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SessionCookiesTest {
+    @Test fun `stored format written by earlier versions is read and rewritten unchanged`() {
+        val stored = """{"cookies":[{"name":"SAPISID","value":"fake-primary","expires":99999999999999},{"name":"LOGIN_INFO","value":"fake-login"}]}"""
+        val cookies = SessionCookies.decoded(stored)
+        assertEquals("fake-primary", cookies.value("SAPISID")); assertEquals("fake-login", cookies.value("LOGIN_INFO"))
+        assertEquals(stored, cookies.encoded())
+    }
+    @Test fun `a damaged stored session fails without quoting its contents`() {
+        val error = assertThrows(IllegalArgumentException::class.java) { SessionCookies.decoded("""{"cookies":[{"name":"SAPISID","value":{"secret":"FAKE_SECRET"}}]}""") }
+        assertFalse(error.message.orEmpty().contains("FAKE_SECRET")); assertNull(error.cause)
+    }
     private fun row(domain: String, name: String, value: String, expiry: Long = 0) = "$domain\tTRUE\t/\tTRUE\t$expiry\t$name\t$value"
     @Test fun `Netscape import supports HttpOnly and secure cookies without unrelated domains`() {
         val cookies = SessionCookies.fromNetscape(listOf("# Netscape HTTP Cookie File", row("#HttpOnly_.youtube.com", "SAPISID", "fake-primary"),

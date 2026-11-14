@@ -1,11 +1,22 @@
 package dev.quietube.account.oauth
 
 import dev.quietube.account.accountJson
-import dev.quietube.account.long
-import dev.quietube.account.str
-import kotlinx.serialization.json.*
+import dev.quietube.account.decodeQuietly
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import java.net.URI
 
+/** The encrypted file's layout; EncryptedSessionStore recognises it by the leading "oauth" key. Changing it signs existing users out. */
+@Serializable private class StoredDeviceSession(val oauth: StoredOAuth)
+@Serializable private class StoredOAuth(val accessToken: String, val refreshToken: String, val expiresAt: Long,
+    val clientId: String, val clientSecret: String, val version: String, val visitor: String)
+@Serializable private class DeviceCodeResponse(@SerialName("verification_url") val verificationUrl: String? = null,
+    @SerialName("verification_uri") val verificationUri: String? = null, @SerialName("expires_in") val expiresIn: Long? = null,
+    @SerialName("user_code") val userCode: String? = null, val interval: Long? = null, @SerialName("device_code") val deviceCode: String? = null)
+@Serializable private class TokenResponse(val error: String? = null, @SerialName("access_token") val accessToken: String? = null,
+    @SerialName("token_type") val tokenType: String? = null, @SerialName("refresh_token") val refreshToken: String? = null,
+    @SerialName("expires_in") val expiresIn: Long? = null)
 class TvClientConfiguration(val clientId: String, val clientSecret: String, val version: String, val visitor: String) {
     override fun toString() = "TvClientConfiguration([redacted])"
 }
@@ -18,18 +29,13 @@ class DeviceSession(val accessToken: String, val refreshToken: String, val expir
         require(accessToken.isNotBlank() && refreshToken.isNotBlank() && accessToken.none { it <= ' ' || it >= '\u007f' }) { "Invalid token response." }
     }
     override fun toString() = "DeviceSession([redacted])"
-    fun encoded(): String = buildJsonObject {
-        put("oauth", buildJsonObject {
-            put("accessToken", accessToken); put("refreshToken", refreshToken); put("expiresAt", expiresAt)
-            put("clientId", configuration.clientId); put("clientSecret", configuration.clientSecret)
-            put("version", configuration.version); put("visitor", configuration.visitor)
-        })
-    }.toString()
+    fun encoded(): String = accountJson.encodeToString(StoredDeviceSession.serializer(), StoredDeviceSession(StoredOAuth(
+        accessToken, refreshToken, expiresAt, configuration.clientId, configuration.clientSecret, configuration.version, configuration.visitor)))
     companion object {
         fun decode(text: String): DeviceSession {
-            val obj = accountJson.parseToJsonElement(text).jsonObject["oauth"]!!.jsonObject
-            return DeviceSession(obj.str("accessToken")!!, obj.str("refreshToken")!!, obj.long("expiresAt")!!,
-                TvClientConfiguration(obj.str("clientId")!!, obj.str("clientSecret")!!, obj.str("version")!!, obj.str("visitor")!!))
+            val stored = accountJson.decodeQuietly(StoredDeviceSession.serializer(), text).oauth
+            return DeviceSession(stored.accessToken, stored.refreshToken, stored.expiresAt,
+                TvClientConfiguration(stored.clientId, stored.clientSecret, stored.version, stored.visitor))
         }
     }
 }
@@ -43,27 +49,31 @@ sealed interface DevicePoll {
 object DeviceCodeParser {
     private val USER_CODE = Regex("[A-Za-z0-9-]{4,32}")
     fun login(obj: JsonObject, configuration: TvClientConfiguration, now: Long): DeviceLogin {
-        val url = obj.str("verification_url") ?: obj.str("verification_uri") ?: error("Missing activation URL")
+        val response = accountJson.decodeQuietly(DeviceCodeResponse.serializer(), obj)
+        val url = response.verificationUrl ?: response.verificationUri ?: error("Missing activation URL")
         require(allowedActivationUrl(url)) { "Untrusted activation URL." }
-        val seconds = obj.long("expires_in")?.coerceIn(1, 1800) ?: 600
-        val code = obj.str("user_code") ?: error("Missing user code")
+        val seconds = response.expiresIn?.coerceIn(1, 1800) ?: 600
+        val code = response.userCode ?: error("Missing user code")
         require(USER_CODE.matches(code)) { "Invalid user code." }
-        return DeviceLogin(code, url, now+seconds*1000, (obj.long("interval") ?: 5).coerceIn(5, 60),
-            obj.str("device_code")?.takeIf { it.isNotBlank() } ?: error("Missing device code"), configuration)
+        return DeviceLogin(code, url, now+seconds*1000, (response.interval ?: 5).coerceIn(5, 60),
+            response.deviceCode?.takeIf { it.isNotBlank() } ?: error("Missing device code"), configuration)
     }
-    fun poll(obj: JsonObject, configuration: TvClientConfiguration, now: Long, previousRefresh: String? = null): DevicePoll = when(obj.str("error")) {
-        "authorization_pending" -> DevicePoll.Pending
-        "slow_down" -> DevicePoll.SlowDown
-        "access_denied" -> DevicePoll.Denied
-        "expired_token", "expired_device_code" -> DevicePoll.Expired
-        null -> {
-            val token = obj.str("access_token") ?: error("Missing access token")
-            require(obj.str("token_type")?.equals("Bearer", true) == true) { "Unexpected token type." }
-            val refresh = obj.str("refresh_token") ?: previousRefresh ?: error("Missing refresh token")
-            val seconds = obj.long("expires_in")?.takeIf { it in 1..86400 } ?: error("Invalid token expiry")
-            DevicePoll.Granted(DeviceSession(token, refresh, now+seconds*1000, configuration))
+    fun poll(obj: JsonObject, configuration: TvClientConfiguration, now: Long, previousRefresh: String? = null): DevicePoll {
+        val response = accountJson.decodeQuietly(TokenResponse.serializer(), obj)
+        return when (response.error) {
+            "authorization_pending" -> DevicePoll.Pending
+            "slow_down" -> DevicePoll.SlowDown
+            "access_denied" -> DevicePoll.Denied
+            "expired_token", "expired_device_code" -> DevicePoll.Expired
+            null -> {
+                val token = response.accessToken ?: error("Missing access token")
+                require(response.tokenType?.equals("Bearer", true) == true) { "Unexpected token type." }
+                val refresh = response.refreshToken ?: previousRefresh ?: error("Missing refresh token")
+                val seconds = response.expiresIn?.takeIf { it in 1..86400 } ?: error("Invalid token expiry")
+                DevicePoll.Granted(DeviceSession(token, refresh, now+seconds*1000, configuration))
+            }
+            else -> throw IllegalArgumentException("YouTube rejected device authorization.")
         }
-        else -> throw IllegalArgumentException("YouTube rejected device authorization.")
     }
     fun allowedActivationUrl(url: String): Boolean = try {
         val uri = URI(url)

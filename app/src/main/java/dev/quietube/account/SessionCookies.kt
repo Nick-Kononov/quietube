@@ -1,9 +1,13 @@
 package dev.quietube.account
 
 import java.security.MessageDigest
-import kotlinx.serialization.json.*
+import kotlinx.serialization.Serializable
 import okhttp3.Cookie
 import okhttp3.HttpUrl.Companion.toHttpUrl
+
+/** The encrypted file's layout; changing it signs existing users out. Plain classes, so values never reach a toString(). */
+@Serializable private class StoredCookies(val cookies: List<StoredCookie>)
+@Serializable private class StoredCookie(val name: String, val value: String, val expires: Long? = null)
 
 /** Deliberately not a data class; values and expiry metadata remain private. */
 class SessionCookies private constructor(private val values: Map<String, String>, private val expires: Map<String, Long> = emptyMap()) {
@@ -14,11 +18,8 @@ class SessionCookies private constructor(private val values: Map<String, String>
     internal fun usable(nowMillis: Long = System.currentTimeMillis()): Boolean = value("LOGIN_INFO", nowMillis) != null &&
         listOf("SAPISID", "__Secure-3PAPISID", "__Secure-1PAPISID").any { value(it, nowMillis) != null }
     internal fun sameContents(other: SessionCookies): Boolean = values == other.values && expires == other.expires
-    internal fun encoded(): String = buildJsonObject {
-        put("cookies", JsonArray(values.map { (name, value) -> buildJsonObject {
-            put("name", name); put("value", value); expires[name]?.let { put("expires", it) }
-        } }))
-    }.toString()
+    internal fun encoded(): String = accountJson.encodeToString(StoredCookies.serializer(),
+        StoredCookies(values.map { (name, value) -> StoredCookie(name, value, expires[name]) }))
     internal fun updated(headers: List<String>, nowMillis: Long = System.currentTimeMillis()): SessionCookies {
         val next = values.toMutableMap(); val expiry = expires.toMutableMap()
         next.keys.toList().filter { (expiry[it] ?: Long.MAX_VALUE) <= nowMillis }.forEach { next.remove(it); expiry.remove(it) }
@@ -54,12 +55,10 @@ class SessionCookies private constructor(private val values: Map<String, String>
         }
         internal fun decoded(text: String): SessionCookies {
             if (!text.startsWith('{')) return fromHeader(text) // Existing encrypted v1 sessions migrate on next write.
-            val rows = accountJson.parseToJsonElement(text).jsonObject["cookies"]!!.jsonArray
             val values = linkedMapOf<String, String>(); val expires = linkedMapOf<String, Long>()
-            rows.forEach { row ->
-                val obj = row.jsonObject; val name = obj["name"]!!.jsonPrimitive.content
-                values[name] = obj["value"]!!.jsonPrimitive.content
-                obj["expires"]?.jsonPrimitive?.longOrNull?.let { expires[name] = it }
+            accountJson.decodeQuietly(StoredCookies.serializer(), text).cookies.forEach { cookie ->
+                values[cookie.name] = cookie.value
+                cookie.expires?.let { expires[cookie.name] = it }
             }
             return checked(values, expires)
         }

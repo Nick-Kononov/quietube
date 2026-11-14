@@ -1,9 +1,16 @@
 package dev.quietube.account
 
+import kotlinx.serialization.DeserializationStrategy
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.*
 
 /** Shared by the web, TV and action responses: their shapes change often, so every read is a tolerant lookup. */
 internal val accountJson = Json { ignoreUnknownKeys = true; isLenient = false }
+/** Decodes without letting a failure's message (which quotes the input, tokens included) travel with the exception. */
+internal fun <T> Json.decodeQuietly(serializer: DeserializationStrategy<T>, element: JsonElement): T =
+    try { decodeFromJsonElement(serializer, element) } catch (_: SerializationException) { throw IllegalArgumentException("Unexpected response.") }
+internal fun <T> Json.decodeQuietly(serializer: DeserializationStrategy<T>, text: String): T =
+    try { decodeFromString(serializer, text) } catch (_: SerializationException) { throw IllegalArgumentException("Unexpected response.") }
 internal fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
 internal fun JsonObject.long(key: String): Long? = (this[key] as? JsonPrimitive)?.longOrNull
 internal fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.booleanOrNull

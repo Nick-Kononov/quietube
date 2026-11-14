@@ -31,9 +31,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.CookieJar
 import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -47,6 +46,7 @@ import okhttp3.Request
 data class Tv(val name: String, val host: String, val appUrl: String? = null, val renderer: String? = null)
 /** Where a TV's media player is in the video, as it last reported. */
 data class TvStatus(val positionMs: Long, val playing: Boolean)
+@Serializable private class Pairing(val screen: Screen? = null) { @Serializable class Screen(val loungeToken: String? = null) }
 private class SsdpAnswer(val address: InetAddress, val target: String, val location: String)
 
 /**
@@ -256,8 +256,7 @@ class TvCaster @Inject constructor(private val repository: VideoRepository,
             .post(FormBody.Builder().add("pairing_code", pairing).build()).build()
         return http.newCall(request).await().use { response ->
             if (!response.isSuccessful) return null
-            val screen = runCatching { json.parseToJsonElement(response.body!!.string()).jsonObject["screen"]?.jsonObject }.getOrNull()
-            screen?.get("loungeToken")?.jsonPrimitive?.content
+            runCatching { json.decodeFromString(Pairing.serializer(), response.body!!.string()) }.getOrNull()?.screen?.loungeToken
         }
     }
 
