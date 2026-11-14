@@ -1170,3 +1170,15 @@ inspection confirmed the JVM implementation on debug unit-test compile/runtime
 classpaths and the Android implementation on debug/release app runtimes.
 No device was connected, so Android startup, signed-in requests, playback and
 casting were not checked on a device. No APK was installed or release published.
+
+## Version bump for 0.5.10
+
+Bumped versionCode from 20 to 21 and versionName from 0.5.9 to 0.5.10 for the
+dependency security fixes, compatible dependency updates and OkHttp 5 platform
+migration above. This prepares the next release; it does not publish a GitHub
+release or change signing.
+
+`assembleDebug testDebugUnitTest lintDebug` passed; lint retained the same 32
+warnings with no errors. The debug APK metadata reports versionName 0.5.10 and
+versionCode 21. No device was connected, so no installation or on-device check
+was run for this metadata-only change.
