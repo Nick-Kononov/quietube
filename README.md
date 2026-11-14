@@ -112,6 +112,23 @@ one public YouTube thumbnail and shows whether it was cached before display.
   the chunked data source. Run them on a spare device, because the test runner
   may uninstall the app and its data.
 
+### Dependency checks
+
+Dependabot checks Gradle dependencies and GitHub Actions weekly and opens
+update PRs. Related Kotlin compiler plugins, Hilt, Room, Coil, coroutines and
+OkHttp artifacts update together. Each PR runs the debug build, offline JVM
+tests and Android lint; updates still need review and are not auto-merged.
+
+The Dependency graph workflow submits resolved dependencies, including
+transitive libraries, to GitHub on pushes to `main` and daily. Keep **Dependabot
+alerts** and **Dependabot security updates** enabled in the repository's
+Settings → Advanced Security. Known vulnerabilities appear in Security →
+Dependabot, with fix PRs where GitHub can produce one. Advisory coverage varies,
+especially for JitPack artifacts; a clean report is not a security guarantee.
+These are GitHub checks, separate from Android lint, and do not add code or
+network traffic to the app. They become active when the configuration is on
+`main`; either workflow can also be run manually in Actions.
+
 ## Project layout
 
 ```
