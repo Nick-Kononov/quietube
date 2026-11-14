@@ -1,5 +1,18 @@
 package dev.quietube.cast
 
+import android.content.Context
+import android.net.Uri
+import android.util.Log
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.quietube.account.await
+import dev.quietube.data.ExtractorDownloader
+import dev.quietube.data.Outcome
+import dev.quietube.data.StreamSelector
+import dev.quietube.data.VideoRepository
+import dev.quietube.links.VIDEO_ID
+import dev.quietube.playback.ChunkedDataSource
+import dev.quietube.playback.youtubeContentLength
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -9,16 +22,17 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import dev.quietube.account.await
 import okhttp3.CookieJar
 import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -30,6 +44,10 @@ import okhttp3.Request
  * DLNA AVTransport control URL when it can play a stream directly.
  */
 data class Tv(val name: String, val host: String, val appUrl: String? = null, val renderer: String? = null)
+/** Where a TV's media player is in the video, as it last reported. */
+data class TvStatus(val positionMs: Long, val playing: Boolean)
+@Serializable private class Pairing(val screen: Screen? = null) { @Serializable class Screen(val loungeToken: String? = null) }
+private class SsdpAnswer(val address: InetAddress, val target: String, val location: String)
 
 /**
  * Plays a video in the TV's own YouTube app, the way the YouTube phone app does for smart TVs:
@@ -40,8 +58,8 @@ data class Tv(val name: String, val host: String, val appUrl: String? = null, va
  * account; nothing from this app's session is sent.
  */
 @Singleton
-class TvCaster @Inject constructor(private val repository: dev.quietube.data.VideoRepository,
-    private val streaming: OkHttpClient, @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context) {
+class TvCaster @Inject constructor(private val repository: VideoRepository,
+    private val streaming: OkHttpClient, @ApplicationContext private val context: Context) {
     private val http = OkHttpClient.Builder().cookieJar(CookieJar.NO_COOKIES).followRedirects(false)
         .callTimeout(20, TimeUnit.SECONDS).build()
     private val json = Json { ignoreUnknownKeys = true }
@@ -49,7 +67,7 @@ class TvCaster @Inject constructor(private val repository: dev.quietube.data.Vid
     private val remoteId = UUID.randomUUID().toString()
 
     suspend fun discover(): List<Tv> = withContext(Dispatchers.IO) {
-        val found = linkedMapOf<String, Triple<InetAddress, String, String>>()
+        val found = linkedMapOf<String, SsdpAnswer>()
         DatagramSocket().use { socket ->
             socket.soTimeout = 400
             val group = InetAddress.getByName("239.255.255.250")
@@ -57,6 +75,8 @@ class TvCaster @Inject constructor(private val repository: dev.quietube.data.Vid
             val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SEARCH_MS)
             var sends = 0
             while (System.nanoTime() < deadline) {
+                // A dismissed sheet or a new scan must not leave this one listening for the rest of the window.
+                ensureActive()
                 // UDP can drop; repeat the searches a few times during the window.
                 if (sends < 3) {
                     for (target in listOf(DIAL, RENDERER)) {
@@ -73,12 +93,12 @@ class TvCaster @Inject constructor(private val repository: dev.quietube.data.Vid
                 }.toMap()
                 val target = headers["st"]?.takeIf { it == DIAL || it == RENDERER } ?: continue
                 val location = headers["location"] ?: continue
-                found.putIfAbsent("$target $location", Triple(packet.address, target, location))
+                found.putIfAbsent("$target $location", SsdpAnswer(packet.address, target, location))
             }
         }
         val described = coroutineScope {
-            found.values.map { (address, target, location) -> async {
-                runCatching { if (target == DIAL) describeDial(address, location) else describeRenderer(address, location) }.getOrNull()
+            found.values.map { answer -> async {
+                runCatching { if (answer.target == DIAL) describeDial(answer.address, answer.location) else describeRenderer(answer.address, answer.location) }.getOrNull()
             } }.awaitAll().filterNotNull()
         }
         // One TV usually answers both searches; merge them by address.
@@ -103,19 +123,16 @@ class TvCaster @Inject constructor(private val repository: dev.quietube.data.Vid
     private fun describeRenderer(responder: InetAddress, location: String): Tv? {
         if (!LanHttp.isPrivate(responder) || InetAddress.getByName(URI(location).host) != responder) return null
         val description = LanHttp.request("GET", location)
-        val service = Regex("<service>(.*?)</service>", RegexOption.DOT_MATCHES_ALL).findAll(description.body)
-            .map { it.groupValues[1] }.firstOrNull { it.contains(Dlna.SERVICE) } ?: return null
-        val control = Regex("<controlURL>\\s*([^<]+?)\\s*</controlURL>").find(service)?.groupValues?.get(1) ?: return null
+        val service = SERVICE.findAll(description.body).map { it.groupValues[1] }.firstOrNull { it.contains(Dlna.SERVICE) } ?: return null
+        val control = CONTROL_URL.find(service)?.groupValues?.get(1) ?: return null
         val url = URI(location).resolve(control).toString()
         if (InetAddress.getByName(URI(url).host) != responder) return null
         return Tv(friendlyName(description.body, responder), responder.hostAddress!!, renderer = url)
     }
 
     private fun friendlyName(description: String, responder: InetAddress) =
-        Regex("<friendlyName>([^<]{1,80})</friendlyName>").find(description)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+        FRIENDLY_NAME.find(description)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
             ?: "TV at ${responder.hostAddress}"
-
-    private var direct: DirectStream? = null
 
     /**
      * Ad-free playback: the TV's media player gets a stream that this phone remuxes from YouTube's HD H.264 video
@@ -123,29 +140,32 @@ class TvCaster @Inject constructor(private val repository: dev.quietube.data.Vid
      */
     suspend fun playDirect(tv: Tv, url: String, positionMs: Long) = withContext(Dispatchers.IO) {
         val control = tv.renderer ?: error("No media renderer")
-        val details = (repository.playback(url) as? dev.quietube.data.Outcome.Success)?.value ?: error("Video unavailable")
+        val details = (repository.playback(url) as? Outcome.Success)?.value ?: error("Video unavailable")
         val video = details.videoStreams.filter { it.videoOnly && it.codec.startsWith("avc") && it.height in 1..1080 }
             .maxWithOrNull(compareBy({ it.height }, { it.bitrate })) ?: error("No H.264 stream")
         val audio = details.audioStreams.filter { it.mimeType == "audio/mp4" }
-            .let { candidates -> dev.quietube.data.StreamSelector.selectAudio(details.copy(audioStreams = candidates)) } ?: error("No AAC stream")
+            .let { candidates -> StreamSelector.selectAudio(details.copy(audioStreams = candidates)) } ?: error("No AAC stream")
         val address = InetAddress.getByName(tv.host)
         // The phone's address on the TV's network: whatever interface routes to the TV.
         val local = DatagramSocket().use { it.connect(address, 9); it.localAddress }
         val client = streaming.newBuilder().callTimeout(0, TimeUnit.SECONDS).build()
-        val sources = dev.quietube.playback.ChunkedDataSource.Factory(
-            androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(client).setUserAgent(dev.quietube.data.ExtractorDownloader.USER_AGENT))
-        stopDirect()
+        val sources = ChunkedDataSource.Factory(
+            OkHttpDataSource.Factory(client).setUserAgent(ExtractorDownloader.USER_AGENT))
         val duration = details.video.durationSeconds.takeIf { it > 0 }?.times(1_000_000) ?: Long.MAX_VALUE / 4
-        val bytes = listOf(video.url, audio.url).sumOf { dev.quietube.playback.youtubeContentLength(android.net.Uri.parse(it)) ?: 0L }
+        val bytes = listOf(video.url, audio.url).sumOf { youtubeContentLength(Uri.parse(it)) ?: 0L }
         check(bytes > 0) { "Unknown stream size" }
-        val stream = DirectStream(sources, android.net.Uri.parse(video.url), android.net.Uri.parse(audio.url),
+        val stream = DirectStream(sources, Uri.parse(video.url), Uri.parse(audio.url),
             duration, bytes, address, local)
-        direct = stream
-        active = Active(tv, url, null, stream)
-        stream.start()
-        StreamService.start(context, tv.name)
+        // Checked under the lock stopDirect() takes, so a cast cancelled while resolving never starts (or replaces) a stream.
+        synchronized(this@TvCaster) {
+            if (!isActive) { stream.close(); throw CancellationException() }
+            stopDirect()
+            active = Active(tv, url, null, stream)
+            stream.start()
+            StreamService.start(context, tv.name)
+        }
         try { Dlna.play(control, stream.url, details.video.title, stream.streamDurationUs()) }
-        catch (e: Exception) { stopDirect(); throw e }
+        catch (e: Exception) { abandonDirect(tv, url); throw e }
         // The stream starts at 0:00 (the TV's clock counts from its first timestamp); then it jumps to the position.
         if (positionMs > 2_000) {
             // It ignores seeks until frames are showing, and until then may still report the previous video's
@@ -154,25 +174,33 @@ class TvCaster @Inject constructor(private val repository: dev.quietube.data.Vid
             var restarted = false
             while (tries++ < 40) {
                 val status = if (stream.sending) Dlna.status(control) else null
-                if (status != null && status.first < 3_000) restarted = true
-                if (restarted && status != null && status.second && status.first >= 1_000) break
+                if (status != null && status.positionMs < 3_000) restarted = true
+                if (restarted && status != null && status.playing && status.positionMs >= 1_000) break
                 delay(500)
             }
             val seek = runCatching { Dlna.seek(control, positionMs * 1000 - stream.originUs.coerceAtLeast(0)) }
-            android.util.Log.i("YouPoopTv", "Start seek after ${tries * 500}ms: ${seek.exceptionOrNull()?.message ?: "sent"}")
+            Log.i("YouPoopTv", "Start seek after ${tries * 500}ms: ${seek.exceptionOrNull()?.message ?: "sent"}")
         }
         Unit
     }
 
     fun stopDirect(tv: Tv? = null) {
-        if (active?.stream != null) active = null
-        direct?.close(); direct = null
-        StreamService.stop(context)
+        synchronized(this) {
+            active?.stream?.let { it.close(); active = null }
+            StreamService.stop(context)
+        }
         tv?.renderer?.let { control -> Thread { runCatching { Dlna.stop(control) } }.start() }
     }
 
+    /** Ends the stream of [url] that a cancelled or failed cast left running; false if that cast never started one. */
+    fun abandonDirect(tv: Tv, url: String): Boolean = synchronized(this) {
+        val started = active?.let { it.stream != null && it.url == url } == true
+        if (started) stopDirect(tv)
+        started
+    }
+
     suspend fun play(tv: Tv, videoId: String, seconds: Long) = withContext(Dispatchers.IO) {
-        require(Regex("[A-Za-z0-9_-]{11}").matches(videoId))
+        require(VIDEO_ID.matches(videoId))
         val pairing = UUID.randomUUID().toString()
         val launch = LanHttp.request("POST", (tv.appUrl ?: error("No YouTube app")) + YOUTUBE,
             mapOf("Origin" to ORIGIN, "Content-Type" to "text/plain; charset=utf-8"),
@@ -196,8 +224,8 @@ class TvCaster @Inject constructor(private val repository: dev.quietube.data.Vid
     private suspend fun command(token: String, request: Map<String, String>) {
         val bind = lounge(mapOf("RID" to "1", "app" to "youtube-desktop", "device" to "REMOTE_CONTROL", "id" to remoteId,
             "name" to NAME, "loungeIdToken" to token), emptyMap())
-        val sid = Regex("\\[\"c\",\"([^\"]+)\"").find(bind)?.groupValues?.get(1) ?: error("No lounge session")
-        val gsession = Regex("\\[\"S\",\"([^\"]+)\"").find(bind)?.groupValues?.get(1) ?: error("No lounge session")
+        val sid = LOUNGE_SID.find(bind)?.groupValues?.get(1) ?: error("No lounge session")
+        val gsession = LOUNGE_GSESSION.find(bind)?.groupValues?.get(1) ?: error("No lounge session")
         lounge(mapOf("RID" to "2", "SID" to sid, "gsessionid" to gsession, "loungeIdToken" to token), mapOf("count" to "1") + request)
     }
 
@@ -217,10 +245,10 @@ class TvCaster @Inject constructor(private val repository: dev.quietube.data.Vid
     }
 
     /** Video position (ms) and playing state of a direct stream, as the TV reports them. */
-    suspend fun directStatus(): Pair<Long, Boolean>? = withContext(Dispatchers.IO) {
+    suspend fun directStatus(): TvStatus? = withContext(Dispatchers.IO) {
         val current = active ?: return@withContext null
         val stream = current.stream?.takeIf { it.originUs >= 0 } ?: return@withContext null
-        Dlna.status(current.tv.renderer ?: return@withContext null)?.let { (ms, playing) -> ms + stream.originUs / 1000 to playing }
+        Dlna.status(current.tv.renderer ?: return@withContext null)?.let { TvStatus(it.positionMs + stream.originUs / 1000, it.playing) }
     }
 
     private suspend fun loungeToken(pairing: String): String? {
@@ -228,8 +256,7 @@ class TvCaster @Inject constructor(private val repository: dev.quietube.data.Vid
             .post(FormBody.Builder().add("pairing_code", pairing).build()).build()
         return http.newCall(request).await().use { response ->
             if (!response.isSuccessful) return null
-            val screen = runCatching { json.parseToJsonElement(response.body!!.string()).jsonObject["screen"]?.jsonObject }.getOrNull()
-            screen?.get("loungeToken")?.jsonPrimitive?.content
+            runCatching { json.decodeFromString(Pairing.serializer(), response.body!!.string()) }.getOrNull()?.screen?.loungeToken
         }
     }
 
@@ -255,5 +282,10 @@ class TvCaster @Inject constructor(private val repository: dev.quietube.data.Vid
         private const val SEARCH_MS = 3_000L
         private const val DIAL = "urn:dial-multiscreen-org:service:dial:1"
         private const val RENDERER = "urn:schemas-upnp-org:device:MediaRenderer:1"
+        private val SERVICE = Regex("<service>(.*?)</service>", RegexOption.DOT_MATCHES_ALL)
+        private val CONTROL_URL = Regex("<controlURL>\\s*([^<]+?)\\s*</controlURL>")
+        private val FRIENDLY_NAME = Regex("<friendlyName>([^<]{1,80})</friendlyName>")
+        private val LOUNGE_SID = Regex("\\[\"c\",\"([^\"]+)\"")
+        private val LOUNGE_GSESSION = Regex("\\[\"S\",\"([^\"]+)\"")
     }
 }

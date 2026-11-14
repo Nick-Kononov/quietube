@@ -78,7 +78,7 @@ internal fun DescriptionSheet(state: PlaybackState, engagement: EngagementState,
                 Text(if (state.manualQuality == null) "Quality · Auto" else "Quality · ${state.manualQuality}p")
             }
             if (engagement.signedIn) Row(verticalAlignment = Alignment.CenterVertically) {
-                SubscribeButton(engagement,subscribe)
+                SubscribeButton(engagement, subscribe)
                 TextButton(onClick = refresh, enabled = !engagement.busy) { Text("Refresh") }
             } else Text("Sign in to rate videos, subscribe and sync history.", style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = settings) { Text("Settings") }

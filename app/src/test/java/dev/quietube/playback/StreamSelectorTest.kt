@@ -20,7 +20,7 @@ class StreamSelectorTest {
         assertEquals(720, StreamSelector.select(details, 720)!!.video.height)
         assertEquals(2160, StreamSelector.select(details, 2160)!!.video.height)
         assertEquals(360, StreamSelector.select(details, 480)!!.video.height)
-        assertEquals(listOf(2160,1080,720,360), StreamSelector.qualities(details))
+        assertEquals(listOf(2160, 1080, 720, 360), StreamSelector.qualities(details))
     }
     @Test fun `missing audio falls back to muxed and never silent video`() {
         val details = PlaybackDetails(video, listOf(stream(1080), stream(720, false)), emptyList())
@@ -37,7 +37,7 @@ class StreamSelectorTest {
     @Test fun `live prefers HLS and on demand can fall back to manifest`() {
         val details = PlaybackDetails(video.copy(isLive = true), listOf(stream(720, false)), emptyList(), hlsUrl = "https://example.invalid/live.m3u8")
         assertEquals(Delivery.Hls, StreamSelector.select(details, 1080)!!.video.delivery)
-        assertEquals(Delivery.Dash, StreamSelector.select(PlaybackDetails(video, emptyList(), emptyList(), dashUrl = "https://example.invalid/v.mpd"),1080)!!.video.delivery)
+        assertEquals(Delivery.Dash, StreamSelector.select(PlaybackDetails(video, emptyList(), emptyList(), dashUrl = "https://example.invalid/v.mpd"), 1080)!!.video.delivery)
     }
     @Test fun `when all variants exceed cap choose lowest not highest`() {
         val details = PlaybackDetails(video, listOf(stream(2160), stream(1440)), listOf(audio))

@@ -1,6 +1,8 @@
 package dev.quietube.account
 
 import dev.quietube.data.*
+import dev.quietube.links.PLAYLIST_ID
+import dev.quietube.links.VIDEO_ID
 import kotlinx.serialization.json.*
 
 class ParsedAccountPage(val videos: List<Video>, val playlists: List<PlaylistSummary>,
@@ -8,8 +10,6 @@ class ParsedAccountPage(val videos: List<Video>, val playlists: List<PlaylistSum
 
 /** Traverse known content renderers; ignore unfamiliar UI and isolate malformed items. */
 object AccountPageParser {
-    private val videoId = Regex("[A-Za-z0-9_-]{11}")
-    private val playlistId = Regex("[A-Za-z0-9_-]{2,150}")
     private val countText = Regex("([0-9]+(?:[.,][0-9]+)?)\\s*([KMB])?", RegexOption.IGNORE_CASE)
     private val adKeys = setOf("adSlotRenderer", "promotedSparklesWebRenderer", "displayAdRenderer", "promotedVideoRenderer", "playerAds", "adPlacements")
     private val playlistLockups = setOf("LOCKUP_CONTENT_TYPE_PLAYLIST", "LOCKUP_CONTENT_TYPE_PODCAST")
@@ -33,39 +33,11 @@ object AccountPageParser {
                     val renderer = child as? JsonObject
                     try {
                         when (key) {
-                            "tileRenderer" -> {
-                                if (renderer != null) {
-                                    val command = renderer.obj("onSelectCommand")
-                                    // TV lists Shorts with reelWatchEndpoint; they are ordinary watch URLs, flagged so feeds can hide them.
-                                    val id = (command?.obj("watchEndpoint") ?: command?.obj("reelWatchEndpoint"))?.str("videoId")
-                                    val meta = renderer.obj("metadata")?.obj("tileMetadataRenderer")
-                                    val header = renderer.obj("header")?.obj("tileHeaderRenderer")
-                                    val title = text(meta?.get("title") ?: header?.get("title"))
-                                    if (id != null && videoId.matches(id) && title.isNotBlank()) {
-                                        val lines = objects(meta?.get("lines"),"lineItemRenderer")
-                                            .mapNotNull { (it as? JsonObject)?.get("text") }.map(::text).filter { it.isNotBlank() }
-                                        val seconds = duration(objects(header,"thumbnailOverlayTimeStatusRenderer")
-                                            .map { text((it as? JsonObject)?.get("text")) }.firstOrNull { duration(it) >= 0 })
-                                        val percent = header?.let(::findPercent)
-                                        videos.putIfAbsent(watchUrl(id),Video(watchUrl(id),title,
-                                            lines.firstOrNull { !it.contains("view",true) && !it.contains("ago",true) }.orEmpty(),
-                                            thumbnail(header?.get("thumbnail")),seconds,count(lines.firstOrNull { it.contains("view",true) }),
-                                            lines.firstOrNull { it.contains("ago",true) },
-                                            objects(header,"style").any { (it as? JsonPrimitive)?.content?.contains("LIVE") == true },
-                                            percent?.let { if (seconds > 0) seconds*1000*it/100 else null },
-                                            isShort = isShort(renderer)))
-                                    } else {
-                                        // TV library tiles open playlists by browsing "VL<id>" rather than watching.
-                                        val playlist = command?.obj("watchEndpoint")?.str("playlistId") ?: command?.obj("watchPlaylistEndpoint")?.str("playlistId")
-                                            ?: command?.obj("browseEndpoint")?.str("browseId")
-                                                ?.takeIf { renderer.str("contentType") == "TILE_CONTENT_TYPE_PLAYLIST" && it.startsWith("VL") }?.removePrefix("VL")
-                                        val size = objects(header,"thumbnailOverlayTimeStatusRenderer")
-                                            .map { text((it as? JsonObject)?.get("text")) }.firstOrNull { it.contains("video",true) }
-                                        if (playlist != null && playlistId.matches(playlist) && title.isNotBlank())
-                                            playlists.putIfAbsent(playlist,PlaylistSummary(playlist,title,thumbnail(header),size))
-                                        // TV navigation tiles may have no video/playlist; these are expected UI.
-                                    }
-                                }
+                            "tileRenderer" -> if (renderer != null) {
+                                val video = tileVideo(renderer)
+                                // TV navigation tiles may have no video/playlist; these are expected UI.
+                                if (video != null) videos.putIfAbsent(video.url, video)
+                                else tilePlaylist(renderer)?.let { playlists.putIfAbsent(it.id, it) }
                             }
                             "videoRenderer", "gridVideoRenderer", "compactVideoRenderer", "playlistVideoRenderer" -> {
                                 val video = renderer?.let(::legacyVideo)
@@ -75,28 +47,13 @@ object AccountPageParser {
                                 val playlist = renderer?.let(::legacyPlaylist)
                                 if (playlist != null) playlists.putIfAbsent(playlist.id, playlist) else skipped = true
                             }
-                            "lockupViewModel" -> {
-                                if (renderer != null) {
-                                    val id = renderer.str("contentId")
-                                    val type = renderer.str("contentType")
-                                    val metadata = renderer.obj("metadata")?.obj("lockupMetadataViewModel")
-                                    val title = text(metadata?.get("title"))
-                                    if (type == "LOCKUP_CONTENT_TYPE_VIDEO" && id != null && videoId.matches(id) && title.isNotBlank()) {
-                                        val parts = objects(metadata?.get("metadata"), "metadataParts").flatMap { it as? JsonArray ?: JsonArray(emptyList()) }
-                                            .mapNotNull { (it as? JsonObject)?.get("text") }.map(::text).filter { it.isNotBlank() }
-                                        val durationText = objects(renderer["contentImage"], "thumbnailBadgeViewModel")
-                                            .mapNotNull { (it as? JsonObject)?.str("text") }.firstOrNull { duration(it) >= 0 }
-                                        val seconds = duration(durationText)
-                                        val percent = findPercent(renderer)
-                                        val live = objects(renderer, "badgeStyle").any { (it as? JsonPrimitive)?.content?.contains("LIVE") == true }
-                                        videos.putIfAbsent(watchUrl(id), Video(watchUrl(id), title, parts.firstOrNull().orEmpty(),
-                                            thumbnail(renderer["contentImage"]), seconds, count(parts.firstOrNull { it.contains("view", true) }),
-                                            parts.firstOrNull { it.contains("ago", true) || it.contains("streamed", true) }, live,
-                                            resumePositionMs = percent?.let { if (seconds > 0) seconds * 1000 * it / 100 else null },
-                                            isShort = isShort(renderer)))
-                                    } else if (type in playlistLockups && id != null && playlistId.matches(id) && title.isNotBlank()) {
-                                        playlists.putIfAbsent(id, PlaylistSummary(id, title, thumbnail(renderer["contentImage"]), null))
-                                    } else if (type == "LOCKUP_CONTENT_TYPE_VIDEO") skipped = true
+                            "lockupViewModel" -> if (renderer != null) {
+                                val video = lockupVideo(renderer)
+                                val playlist = if (video == null) lockupPlaylist(renderer) else null
+                                when {
+                                    video != null -> videos.putIfAbsent(video.url, video)
+                                    playlist != null -> playlists.putIfAbsent(playlist.id, playlist)
+                                    renderer.str("contentType") == "LOCKUP_CONTENT_TYPE_VIDEO" -> skipped = true
                                 }
                             }
                             "continuationItemRenderer" -> {
@@ -112,19 +69,71 @@ object AccountPageParser {
         }
         return ParsedAccountPage(videos.values.toList(), playlists.values.toList(), token, skipped)
     }
+    private fun tileTitle(renderer: JsonObject): String =
+        text(renderer.obj("metadata")?.obj("tileMetadataRenderer")?.get("title") ?: renderer.obj("header")?.obj("tileHeaderRenderer")?.get("title"))
+    private fun tileVideo(renderer: JsonObject): Video? {
+        val command = renderer.obj("onSelectCommand")
+        // TV lists Shorts with reelWatchEndpoint; they are ordinary watch URLs, flagged so feeds can hide them.
+        val id = (command?.obj("watchEndpoint") ?: command?.obj("reelWatchEndpoint"))?.str("videoId")?.takeIf(VIDEO_ID::matches) ?: return null
+        val title = tileTitle(renderer).takeIf { it.isNotBlank() } ?: return null
+        val header = renderer.obj("header")?.obj("tileHeaderRenderer")
+        val lines = values(renderer.obj("metadata")?.obj("tileMetadataRenderer")?.get("lines"), "lineItemRenderer")
+            .mapNotNull { (it as? JsonObject)?.get("text") }.map(::text).filter { it.isNotBlank() }
+        val seconds = duration(values(header, "thumbnailOverlayTimeStatusRenderer")
+            .map { text((it as? JsonObject)?.get("text")) }.firstOrNull { duration(it) >= 0 })
+        return Video(watchUrl(id), title,
+            lines.firstOrNull { !it.contains("view", true) && !it.contains("ago", true) }.orEmpty(),
+            thumbnail(header?.get("thumbnail")), seconds, count(lines.firstOrNull { it.contains("view", true) }),
+            lines.firstOrNull { it.contains("ago", true) }, isLive(header, "style"),
+            resumePosition(header?.let(::findPercent), seconds), isShort = isShort(renderer))
+    }
+    /** TV library tiles open playlists by browsing "VL<id>" rather than watching. */
+    private fun tilePlaylist(renderer: JsonObject): PlaylistSummary? {
+        val command = renderer.obj("onSelectCommand")
+        val id = command?.obj("watchEndpoint")?.str("playlistId") ?: command?.obj("watchPlaylistEndpoint")?.str("playlistId")
+            ?: command?.obj("browseEndpoint")?.str("browseId")
+                ?.takeIf { renderer.str("contentType") == "TILE_CONTENT_TYPE_PLAYLIST" && it.startsWith("VL") }?.removePrefix("VL")
+        val title = tileTitle(renderer)
+        if (id == null || !PLAYLIST_ID.matches(id) || title.isBlank()) return null
+        val header = renderer.obj("header")?.obj("tileHeaderRenderer")
+        val size = values(header, "thumbnailOverlayTimeStatusRenderer")
+            .map { text((it as? JsonObject)?.get("text")) }.firstOrNull { it.contains("video", true) }
+        return PlaylistSummary(id, title, thumbnail(header), size)
+    }
+    private fun lockupTitle(renderer: JsonObject): String = text(renderer.obj("metadata")?.obj("lockupMetadataViewModel")?.get("title"))
+    private fun lockupVideo(renderer: JsonObject): Video? {
+        if (renderer.str("contentType") != "LOCKUP_CONTENT_TYPE_VIDEO") return null
+        val id = renderer.str("contentId")?.takeIf(VIDEO_ID::matches) ?: return null
+        val title = lockupTitle(renderer).takeIf { it.isNotBlank() } ?: return null
+        val parts = values(renderer.obj("metadata")?.obj("lockupMetadataViewModel")?.get("metadata"), "metadataParts")
+            .flatMap { it as? JsonArray ?: JsonArray(emptyList()) }
+            .mapNotNull { (it as? JsonObject)?.get("text") }.map(::text).filter { it.isNotBlank() }
+        val seconds = duration(values(renderer["contentImage"], "thumbnailBadgeViewModel")
+            .mapNotNull { (it as? JsonObject)?.str("text") }.firstOrNull { duration(it) >= 0 })
+        return Video(watchUrl(id), title, parts.firstOrNull().orEmpty(),
+            thumbnail(renderer["contentImage"]), seconds, count(parts.firstOrNull { it.contains("view", true) }),
+            parts.firstOrNull { it.contains("ago", true) || it.contains("streamed", true) }, isLive(renderer, "badgeStyle"),
+            resumePosition(findPercent(renderer), seconds), isShort = isShort(renderer))
+    }
+    private fun lockupPlaylist(renderer: JsonObject): PlaylistSummary? {
+        val id = renderer.str("contentId")?.takeIf(PLAYLIST_ID::matches) ?: return null
+        val title = lockupTitle(renderer)
+        if (renderer.str("contentType") !in playlistLockups || title.isBlank()) return null
+        return PlaylistSummary(id, title, thumbnail(renderer["contentImage"]), null)
+    }
+    private fun isLive(element: JsonElement?, styleKey: String) = values(element, styleKey).any { (it as? JsonPrimitive)?.content?.contains("LIVE") == true }
+    private fun resumePosition(percent: Long?, seconds: Long): Long? = percent?.takeIf { seconds > 0 }?.let { seconds * 1000 * it / 100 }
     private fun legacyVideo(renderer: JsonObject): Video? {
-        val id = renderer.str("videoId")?.takeIf(videoId::matches) ?: return null
+        val id = renderer.str("videoId")?.takeIf(VIDEO_ID::matches) ?: return null
         val title = text(renderer["title"]).takeIf { it.isNotBlank() } ?: return null
         val seconds = duration(text(renderer["lengthText"]).ifBlank {
-            objects(renderer["thumbnailOverlays"], "thumbnailOverlayTimeStatusRenderer")
+            values(renderer["thumbnailOverlays"], "thumbnailOverlayTimeStatusRenderer")
                 .map { text((it as? JsonObject)?.get("text")) }.firstOrNull().orEmpty()
         })
-        val percent = findPercent(renderer)
         return Video(watchUrl(id), title, text(renderer["ownerText"] ?: renderer["shortBylineText"] ?: renderer["longBylineText"]),
             thumbnail(renderer["thumbnail"]), seconds, count(text(renderer["viewCountText"] ?: renderer["shortViewCountText"])),
             text(renderer["publishedTimeText"]).takeIf { it.isNotBlank() },
-            objects(renderer, "style").any { (it as? JsonPrimitive)?.content?.contains("LIVE") == true },
-            percent?.let { if (seconds > 0) seconds * 1000 * it / 100 else null }, isShort = isShort(renderer))
+            isLive(renderer, "style"), resumePosition(findPercent(renderer), seconds), isShort = isShort(renderer))
     }
     /** Shorts open through reelWatchEndpoint or a /shorts/ URL, or carry the SHORTS overlay style; one walk checks all three. */
     private fun isShort(renderer: JsonObject): Boolean {
@@ -141,7 +150,7 @@ object AccountPageParser {
         return walk(renderer, 0)
     }
     private fun legacyPlaylist(renderer: JsonObject): PlaylistSummary? {
-        val id = renderer.str("playlistId")?.takeIf(playlistId::matches) ?: return null
+        val id = renderer.str("playlistId")?.takeIf(PLAYLIST_ID::matches) ?: return null
         val title = text(renderer["title"]).takeIf { it.isNotBlank() } ?: return null
         return PlaylistSummary(id, title, thumbnail(renderer["thumbnail"] ?: renderer["thumbnails"]),
             text(renderer["videoCountText"]).ifBlank { renderer.str("videoCount").orEmpty() }.takeIf { it.isNotBlank() })
@@ -165,20 +174,21 @@ object AccountPageParser {
         walk(element, 0)
         return candidates.maxByOrNull { it.str("width")?.toIntOrNull() ?: 0 }?.str("url")
     }
-    internal fun objects(element: JsonElement?, key: String): List<JsonElement> {
+    /** Every value stored under [key] anywhere below [element]. */
+    internal fun values(element: JsonElement?, key: String): List<JsonElement> {
         val found = mutableListOf<JsonElement>()
         fun walk(e: JsonElement?, depth: Int) {
             if (depth > 30) return
             when (e) {
                 is JsonArray -> e.forEach { walk(it, depth + 1) }
-                is JsonObject -> e.forEach { (k,v) -> if (k == key) found += v else walk(v, depth + 1) }
+                is JsonObject -> e.forEach { (k, v) -> if (k == key) found += v else walk(v, depth + 1) }
                 else -> Unit
             }
         }
         walk(element, 0); return found
     }
-    private fun findPercent(element: JsonElement): Long? = objects(element, "percentDurationWatched")
-        .firstNotNullOfOrNull { (it as? JsonPrimitive)?.longOrNull }?.coerceIn(0,100)
+    private fun findPercent(element: JsonElement): Long? = values(element, "percentDurationWatched")
+        .firstNotNullOfOrNull { (it as? JsonPrimitive)?.longOrNull }?.coerceIn(0, 100)
     internal fun duration(value: String?): Long {
         val parts = value?.trim()?.split(':') ?: return -1
         if (parts.size !in 2..3 || parts.any { it.toLongOrNull() == null }) return -1

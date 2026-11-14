@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.net.wifi.WifiManager
 import android.os.IBinder
 import android.os.PowerManager
+import androidx.core.app.ServiceCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -32,7 +33,7 @@ class StreamService : Service() {
             .setContentTitle("Playing on ${intent?.getStringExtra(EXTRA_TV) ?: "TV"}")
             .setContentText("This phone is streaming the video. Keep it on the same Wi-Fi.")
             .addAction(Notification.Action.Builder(null, "Stop", stop).build()).setOngoing(true).build()
-        androidx.core.app.ServiceCompat.startForeground(this, NOTIFICATION, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        ServiceCompat.startForeground(this, NOTIFICATION, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         if (wake == null) wake = getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "YouPoop:tv-stream").apply { acquire(4 * 60 * 60 * 1000L) }
         @Suppress("DEPRECATION") // The low-latency mode needs the screen on; high-perf is right for a background stream.

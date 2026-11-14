@@ -1,5 +1,6 @@
 package dev.quietube.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -18,24 +19,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import dev.quietube.account.FeedState
 import dev.quietube.account.SessionStatus
+import dev.quietube.account.pagesAutomatically
 import dev.quietube.data.*
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedScreen(state: FeedState, session: SessionStatus,
     search: () -> Unit, account: () -> Unit, refresh: () -> Unit, more: () -> Unit,
     play: (String) -> Unit, playlist: (PlaylistSummary) -> Unit, back: () -> Unit, prefetch: (List<String>) -> Unit = {},
-    pullRefresh: () -> Unit = refresh, retry: () -> Unit = refresh, profile: Profile? = null, reselect: Int = 0, active: Boolean = true,thumbnailPrefetch: (List<ThumbnailRequest>) -> Unit = {}) {
+    pullRefresh: () -> Unit = refresh, retry: () -> Unit = refresh, profile: Profile? = null, reselect: Int = 0, active: Boolean = true, thumbnailPrefetch: (List<ThumbnailRequest>) -> Unit = {}) {
     val listState = rememberLazyListState()
     if (active) {
         PrefetchVisibleVideos(listState, prefetch)
-        PrefetchVisibleThumbnails(listState,state.videos,thumbnailPrefetch)
+        PrefetchVisibleThumbnails(listState, state.videos, thumbnailPrefetch)
     }
     val restoreIndex = remember { listState.firstVisibleItemIndex }
     var restoring by remember { mutableStateOf(restoreIndex > 0 || listState.firstVisibleItemScrollOffset > 0) }
@@ -47,7 +51,7 @@ fun FeedScreen(state: FeedState, session: SessionStatus,
         }
     }
     // An opened playlist is screen state, not a navigation entry; Back returns to the library.
-    androidx.activity.compose.BackHandler(enabled = state.playlist != null, onBack = back)
+    BackHandler(enabled = state.playlist != null, onBack = back)
     val scroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
     var handled by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(reselect) {
@@ -59,15 +63,16 @@ fun FeedScreen(state: FeedState, session: SessionStatus,
         if (pulling && !state.refreshing && state.error == null) listState.scrollToItem(0)
         pulling = state.refreshing
     }
-    LaunchedEffect(active, listState, state.hasMore, state.loading, state.loadingMore, state.automaticPaging) {
-        if (active && state.hasMore && !state.loading && !state.loadingMore && state.automaticPaging) {
+    val autoPage = active && state.pagesAutomatically
+    LaunchedEffect(listState, autoPage) {
+        if (autoPage) {
             snapshotFlow { val info = listState.layoutInfo; info.visibleItemsInfo.lastOrNull()?.index to info.totalItemsCount }
                 .distinctUntilChanged().collect { (last, count) -> if (last != null && count > 0 && last >= count - 3) more() }
         }
     }
     Scaffold(Modifier.nestedScroll(scroll.nestedScrollConnection), topBar = {
         TopAppBar(title = {
-            if (state.playlist != null) Text(state.playlist.title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            if (state.playlist != null) Text(state.playlist.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
             else if (state.feed == AccountFeed.Home) Wordmark() else Text(state.feed.label())
         }, navigationIcon = {
             if (state.feed in libraryFeeds || state.playlist != null) IconButton(onClick = back) {
@@ -94,7 +99,7 @@ fun FeedScreen(state: FeedState, session: SessionStatus,
                 items(state.playlists, key = { "playlist:${it.id}" }, contentType = { "playlist" }) { item ->
                     ListItem(content = { Text(item.title) }, supportingContent = { Text(item.countText ?: "Playlist") },
                         leadingContent = { AsyncImage(item.thumbnailUrl, null, Modifier.width(120.dp).aspectRatio(16f / 9f).clip(MaterialTheme.shapes.small), contentScale = ContentScale.Crop) },
-                        modifier = Modifier.clickable(role = androidx.compose.ui.semantics.Role.Button) { playlist(item) })
+                        modifier = Modifier.clickable(role = Role.Button) { playlist(item) })
                 }
                 items(state.videos, key = { it.url }, contentType = { "video" }) { video -> VideoCard(video) { play(video.url) } }
                 state.error?.let { error -> item {

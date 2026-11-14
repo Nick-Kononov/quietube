@@ -893,3 +893,98 @@ samples at a real 120 Hz, and the owner confirmed the visible flicker is gone.
 The PiP check rendered zero UI frames over two seconds with its refresh preference
 cleared. All 154 offline tests and builds passed, with no new lint findings.
 Temporary stay-awake was restored; global adaptive refresh remains enabled.
+
+## Review fixes and restructuring (0.5.9)
+
+A read-through of the whole app found four defects, several avoidable requests
+and a few structures that had grown hard to read. Nothing here adds a feature,
+dependency, permission or network destination.
+
+Fixed behaviour:
+
+- Feed paging: a failed "load more" used to be requested again as soon as it
+  failed, for as long as the end of the list was on screen. Signed in, that was
+  one request per second against an account that may already be rate-limited.
+  Automatic paging now waits while an error is shown; "Try again" and "Load
+  more" still work.
+- Direct casting: dismissing the cast sheet or rescanning while a send was in
+  progress cancelled the send but left its stream, foreground service and wake
+  lock running with nothing in the UI to stop them. A cancelled or failed send
+  now ends the stream it started, and a cast cancelled before its stream exists
+  never replaces the one already playing.
+- Liking or subscribing cleared the account's resume positions along with the
+  feed cache. Only the feed cache is cleared now.
+- Playlist and related videos now recognise audio-only live streams, as search
+  already did.
+
+Fewer requests. Opening a video signed in fetched the account `player` response
+twice (once for engagement, once for history tracking), each a second apart
+behind the account request lock. The two callers now share one response for up
+to a minute; a second watch of the same video still fetches its own tracking
+URLs. The response is held in memory only, tied to the session revision and
+dropped on sign-out. Changing a sync setting no longer reloads the playing
+video's account details, and the dislike estimate no longer waits for them.
+Resume positions are pruned once per service start rather than on every save.
+
+Privacy-relevant details: the direct-stream failure log now records only the
+exception type, because a source error's message can quote the URL it failed
+on. The unused `final` flag is gone from watch reporting, so the TV client's
+"mark whole video watched" shortcut cannot be sent by mistake.
+
+Structure: `MainActivity` is an `App` composable plus one composable per
+destination; `PlayerScreen` takes grouped actions; `AccountPageParser` has a
+function per renderer kind; feed selection storage lives in `FeedPreferences`;
+JSON helpers, YouTube ID patterns and watch segments each have one definition.
+
+`assembleDebug`, the offline unit tests (including new ones for paging,
+engagement settings and the JSON walk) and lint pass with no new findings.
+
+The R8 release build of this branch was then installed over the signed-in app
+on the Pixel 8 and checked by hand:
+
+- Launch: cold start in about 0.35 s, signed-in Home loaded.
+- Paging: with Wi-Fi and mobile data off, the end of Home showed "Feed
+  unavailable / Try again" and stayed there for 12 s with no spinner; back
+  online, "Try again" loaded the next page.
+- Watch history: 45 s of playback produced no sync message, and History listed
+  the video first with progress matching the paused position. Likes and the
+  dislike estimate both appeared on the player.
+- Direct cast to a Hisense VIDAA TV: dismissing the sheet mid-send, by tapping
+  outside it or dragging it down, stopped the stream service within two
+  seconds and the TV never fetched the stream. A completed cast followed a
+  15 s seek on the phone, and Stop ended the service.
+
+One thing the fix does not cover: Back (key or gesture) while a send is in
+progress does not reach the sheet's dismiss callback, so the cast completes
+and shows the usual "Playing on ... Stop" row. Released 0.5.8 behaves the
+same, so this is existing Material sheet behaviour rather than a regression,
+and nothing is orphaned. Not checked on the device: the sign-in and sign-out
+flows, the YouTube-app (Lounge) cast, and casting a second video over a
+running one.
+
+## Typed JSON for fixed-shape payloads (0.5.9)
+
+A review suggested replacing hand-written JSON reading with annotated
+kotlinx.serialization classes. That was applied where the shape is fixed and
+either ours or a documented contract: the two encrypted session formats
+(cookies and the device-code session), the OAuth device-code and token
+responses, the Return YouTube Dislike response and the Lounge pairing token.
+This adds the Kotlin serialization compiler plugin (same version as Kotlin);
+the runtime library was already a dependency.
+
+The stored session formats are unchanged byte for byte, and tests pin them
+against strings written by earlier versions: a mismatch would have signed
+existing users out on upgrade. Decoding failures are rethrown without the
+library's message, which quotes the input and could otherwise carry a token
+into an exception. The classes are plain, not data classes, so they have no
+generated `toString()`.
+
+Deliberately not converted: the InnerTube parsers (`AccountPageParser`,
+`ActionParser`, `WebConfigurationParser`) search undocumented responses for
+known renderers at any depth and skip malformed items; fixed classes would
+make them fail whole pages when YouTube moves a field. Search history keeps
+its element-by-element filter for the same reason.
+
+Build, unit tests, lint and the R8 release build pass. This change was not
+installed on a device; the first launch after upgrading is the one to watch,
+since it reads the stored session through the new classes.

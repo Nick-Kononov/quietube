@@ -3,6 +3,7 @@ package dev.quietube.data
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.os.SystemClock
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,7 +31,7 @@ class PlaybackPrefetcher(
     private val source: AnonymousSource,
     private val prefetchAllowed: () -> Boolean,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-    private val clock: () -> Long = android.os.SystemClock::elapsedRealtime,
+    private val clock: () -> Long = SystemClock::elapsedRealtime,
 ) {
     @Inject constructor(source: AnonymousSource, network: NetworkStatus) : this(source, network::onUnmeteredWifi)
 

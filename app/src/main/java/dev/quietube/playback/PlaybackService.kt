@@ -4,8 +4,10 @@ package dev.quietube.playback
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.os.Bundle
+import android.os.Process
 import androidx.media3.common.*
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -18,7 +20,9 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.AndroidEntryPoint
 import dev.quietube.MainActivity
+import dev.quietube.account.EncryptedSessionStore
 import dev.quietube.data.*
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.update
@@ -26,7 +30,7 @@ import okhttp3.OkHttpClient
 
 @AndroidEntryPoint
 class PlaybackService : MediaSessionService() {
-    @Inject lateinit var sessions: dev.quietube.account.EncryptedSessionStore
+    @Inject lateinit var sessions: EncryptedSessionStore
     @Inject lateinit var repository: VideoRepository
     @Inject lateinit var store: PlaybackStateStore
     @Inject lateinit var positions: ResumeDao
@@ -45,13 +49,13 @@ class PlaybackService : MediaSessionService() {
     /** One writer keeps resume saves in order; parallel IO could commit an older position last. */
     private val positionWriter = Dispatchers.IO.limitedParallelism(1)
     private val metrics: PlaybackMetrics? by lazy {
-        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) PlaybackMetrics() else null
+        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) PlaybackMetrics() else null
     }
 
     override fun onCreate() {
         super.onCreate()
         // Chunks are megabytes long: keep the connect/read timeouts but drop the whole-call limit, which would cut slow links mid-chunk.
-        val streaming = http.newBuilder().callTimeout(0, java.util.concurrent.TimeUnit.SECONDS).build()
+        val streaming = http.newBuilder().callTimeout(0, TimeUnit.SECONDS).build()
         sources = DefaultMediaSourceFactory(ChunkedDataSource.Factory(OkHttpDataSource.Factory(streaming).setUserAgent(ExtractorDownloader.USER_AGENT).setTransferListener(metrics)))
         player = ExoPlayer.Builder(this).setMediaSourceFactory(sources).build().apply {
             setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
@@ -68,8 +72,8 @@ class PlaybackService : MediaSessionService() {
                     if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) || events.contains(Player.EVENT_POSITION_DISCONTINUITY)
                         || events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
                         savePosition()
-                        history.sample(player.currentMediaItem?.mediaId,player.currentPosition,player.isPlaying,
-                            events.contains(Player.EVENT_POSITION_DISCONTINUITY),player.playbackParameters.speed)
+                        history.sample(player.currentMediaItem?.mediaId, player.currentPosition, player.isPlaying,
+                            events.contains(Player.EVENT_POSITION_DISCONTINUITY), player.playbackParameters.speed)
                     }
                 }
                 override fun onPlayerError(error: PlaybackException) {
@@ -93,7 +97,7 @@ class PlaybackService : MediaSessionService() {
         session = MediaSession.Builder(this, player).setSessionActivity(activity).setCallback(object : MediaSession.Callback {
             override fun onConnectAsync(session: MediaSession, controller: MediaSession.ControllerInfo): ListenableFuture<MediaSession.ConnectionResult> {
                 val builder = MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller)
-                if (controller.uid == android.os.Process.myUid()) builder.setAvailableSessionCommands(
+                if (controller.uid == Process.myUid()) builder.setAvailableSessionCommands(
                     MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
                         .add(SessionCommand(PLAY_VIDEO, Bundle.EMPTY)).add(SessionCommand(SET_QUALITY, Bundle.EMPTY))
                         .add(SessionCommand(CLOSE, Bundle.EMPTY)).build())
@@ -101,7 +105,7 @@ class PlaybackService : MediaSessionService() {
             }
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo,
                 customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
-                if (controller.uid != android.os.Process.myUid()) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
+                if (controller.uid != Process.myUid()) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
                 when (customCommand.customAction) {
                     PLAY_VIDEO -> {
                         val url = args.getString("url") ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_BAD_VALUE))
@@ -134,11 +138,13 @@ class PlaybackService : MediaSessionService() {
             }
         }
         history.start(scope)
+        // A save adds at most one row per video, so trimming old rows once per service start keeps the table bounded.
+        scope.launch(positionWriter) { positions.prune() }
         ticker = scope.launch {
             var tick = 0
             while (isActive) {
                 delay(1_000)
-                history.sample(player.currentMediaItem?.mediaId,player.currentPosition,player.isPlaying,speed = player.playbackParameters.speed)
+                history.sample(player.currentMediaItem?.mediaId, player.currentPosition, player.isPlaying, speed = player.playbackParameters.speed)
                 if (++tick % 5 == 0) savePosition()
                 if (tick % 15 == 0 && player.isPlaying) metrics?.summary(player.videoSize.height)
             }
@@ -209,13 +215,12 @@ class PlaybackService : MediaSessionService() {
         val position = resumablePosition(player.currentPosition, player.duration)
         return scope.launch(positionWriter) {
             positions.save(ResumePosition(current.video.url, position, System.currentTimeMillis()))
-            positions.prune()
         }
     }
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
     override fun onDestroy() {
         val finalSave = savePosition()
-        history.sample(player.currentMediaItem?.mediaId,player.currentPosition,false,speed = player.playbackParameters.speed)
+        history.sample(player.currentMediaItem?.mediaId, player.currentPosition, false, speed = player.playbackParameters.speed)
         val finalReport = history.finish()
         ticker?.cancel()
         resolution?.cancel()

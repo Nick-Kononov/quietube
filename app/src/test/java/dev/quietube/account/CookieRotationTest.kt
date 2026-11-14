@@ -7,8 +7,8 @@ class CookieRotationTest {
     private fun session() = SessionCookies.fromHeader("SAPISID=fake-primary; LOGIN_INFO=fake-login; SID=fake-sid")
     @Test fun `response rotates auth cookies and preserves unrelated session values`() {
         val updated = session().updated(listOf("SAPISID=fake-rotated; Domain=.youtube.com; Path=/; Secure; HttpOnly", "__Secure-3PAPISID=fake-third; Path=/; Secure"))
-        assertEquals("fake-rotated",updated.value("SAPISID")); assertEquals("fake-third",updated.value("__Secure-3PAPISID"))
-        assertEquals("fake-sid",updated.value("SID")); assertTrue(updated.usable())
+        assertEquals("fake-rotated", updated.value("SAPISID")); assertEquals("fake-third", updated.value("__Secure-3PAPISID"))
+        assertEquals("fake-sid", updated.value("SID")); assertTrue(updated.usable())
     }
     @Test fun `foreign domains and non root paths cannot overwrite session`() {
         val original = session()
@@ -21,11 +21,11 @@ class CookieRotationTest {
     }
     @Test fun `expiry metadata survives encrypted record encoding and prevents expired headers`() {
         val start = System.currentTimeMillis()
-        val updated = session().updated(listOf("SAPISID=fake-new; Domain=.youtube.com; Path=/; Max-Age=60"),start)
+        val updated = session().updated(listOf("SAPISID=fake-new; Domain=.youtube.com; Path=/; Max-Age=60"), start)
         val restored = SessionCookies.decoded(updated.encoded())
-        assertEquals("fake-new",restored.value("SAPISID",start+1000))
-        assertNull(restored.value("SAPISID",start+120_000)); assertFalse(restored.header(start+120_000).contains("SAPISID="))
-        assertEquals("fake-login",restored.value("LOGIN_INFO",start+120_000))
+        assertEquals("fake-new", restored.value("SAPISID", start+1000))
+        assertNull(restored.value("SAPISID", start+120_000)); assertFalse(restored.header(start+120_000).contains("SAPISID="))
+        assertEquals("fake-login", restored.value("LOGIN_INFO", start+120_000))
     }
     @Test fun `legacy encrypted header payload still migrates`() {
         val restored = SessionCookies.decoded("SAPISID=fake-primary; LOGIN_INFO=fake-login")

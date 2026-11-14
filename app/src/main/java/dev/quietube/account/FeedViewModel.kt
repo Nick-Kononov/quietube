@@ -1,27 +1,23 @@
 package dev.quietube.account
 
-import android.content.Context
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.quietube.data.*
 import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-private val Context.feedPreferences by preferencesDataStore("feed_preferences")
 data class FeedState(val feed: AccountFeed = AccountFeed.Home, val playlist: PlaylistSummary? = null,
     val videos: List<Video> = emptyList(), val playlists: List<PlaylistSummary> = emptyList(),
     val loading: Boolean = false, val refreshing: Boolean = false, val loadingMore: Boolean = false, val hasMore: Boolean = false,
     val error: VideoError? = null, val partial: Boolean = false, val automaticPaging: Boolean = true, val initialized: Boolean = true)
+/** Whether reaching the end loads the next page by itself; a failed load waits for "Try again" rather than repeating. */
+internal val FeedState.pagesAutomatically get() = hasMore && automaticPaging && !loading && !loadingMore && error == null
 @HiltViewModel
 class FeedViewModel @Inject constructor(private val repository: VideoRepository, private val sessions: EncryptedSessionStore,
-    @ApplicationContext private val context: Context) : ViewModel() {
+    private val preferences: FeedPreferences) : ViewModel() {
     private val mutable = MutableStateFlow(FeedState(initialized = false))
     val state = mutable.asStateFlow()
     private val snapshots = FeedSnapshots()
@@ -37,17 +33,13 @@ class FeedViewModel @Inject constructor(private val repository: VideoRepository,
         } }
         viewModelScope.launch {
             sessions.initialize()
-            val prefs = try { context.feedPreferences.data.first() } catch (_: java.io.IOException) { null }
-            val initial = AccountFeed.entries.firstOrNull { it.name == prefs?.get(stringPreferencesKey("selected_feed")) } ?: AccountFeed.Home
-            val playlist = prefs?.get(stringPreferencesKey("playlist_id"))?.let { id ->
-                PlaylistSummary(id, prefs[stringPreferencesKey("playlist_title")] ?: "Playlist", prefs[stringPreferencesKey("playlist_thumbnail")], prefs[stringPreferencesKey("playlist_count")])
-            }
-            mutable.value = FeedState(feed = initial, playlist = playlist, initialized = true)
+            val saved = preferences.read()
+            mutable.value = FeedState(feed = saved.feed, playlist = saved.playlist, initialized = true)
             sessions.status.filter { it.ready }.collectLatest {
                 generation++; request?.cancel(); cursor = null; snapshots.clear(); snapshotState.value = emptyMap()
                 mutable.value = FeedState(feed = if (it.signedIn) mutable.value.feed else AccountFeed.Home,
                     playlist = if (it.signedIn) mutable.value.playlist else null, initialized = true)
-                if (!it.signedIn) context.feedPreferences.edit { prefs -> prefs.clear() }
+                if (!it.signedIn) preferences.clear()
                 refresh()
             }
         }
@@ -55,16 +47,9 @@ class FeedViewModel @Inject constructor(private val repository: VideoRepository,
     private fun saveCurrent() { if (sessions.status.value.signedIn) snapshots.save(mutable.value, cursor, failedAppend) }
     private fun persist() {
         val state = mutable.value; val revision = sessions.status.value.revision
-        viewModelScope.launch { context.feedPreferences.edit { prefs ->
-            if (!sessions.status.value.signedIn || sessions.status.value.revision != revision) return@edit
-            prefs.clear(); prefs[stringPreferencesKey("selected_feed")] = state.feed.name
-            state.playlist?.let { playlist ->
-                prefs[stringPreferencesKey("playlist_id")] = playlist.id
-                prefs[stringPreferencesKey("playlist_title")] = playlist.title
-                playlist.thumbnailUrl?.let { prefs[stringPreferencesKey("playlist_thumbnail")] = it }
-                playlist.countText?.let { prefs[stringPreferencesKey("playlist_count")] = it }
-            }
-        } }
+        viewModelScope.launch {
+            preferences.save(FeedSelection(state.feed, state.playlist)) { sessions.status.value.signedIn && sessions.status.value.revision == revision }
+        }
     }
     private fun show(feed: AccountFeed, playlist: PlaylistSummary? = null) {
         saveCurrent(); generation++; request?.cancel()

@@ -13,7 +13,7 @@ import java.io.OutputStream
  * timestamps, which Matroska players expect.
  */
 internal class MatroskaWriter(private val out: OutputStream) {
-    private var cluster = ByteArrayOutputStream()
+    private val cluster = ByteArrayOutputStream()
     private var clusterMs = -1L
     private var lastVideoKeyMs = -1L
 
@@ -37,7 +37,7 @@ internal class MatroskaWriter(private val out: OutputStream) {
         if (cluster.size() == 0) return
         out.write(id(0x1F43B675)); out.write(size(cluster.size().toLong())); cluster.writeTo(out)
         out.flush()
-        cluster = ByteArrayOutputStream()
+        cluster.reset()
     }
 
     /**

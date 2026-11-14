@@ -1,23 +1,27 @@
 package dev.quietube.account
 
+import dev.quietube.account.actions.YouTubeActions
 import dev.quietube.data.*
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 
 private class AccountCursor(val browseId: String, val token: String, val revision: Long) : Continuation
+private class CachedPage(val at: Long, val page: VideoPage)
 @Singleton
-class InnerTubeAccountSource @Inject constructor(private val client: InnerTubeClient, private val sessions: EncryptedSessionStore, private val actions: dev.quietube.account.actions.YouTubeActions) : AccountSource {
+class InnerTubeAccountSource @Inject constructor(private val client: InnerTubeClient, private val sessions: EncryptedSessionStore, private val actions: YouTubeActions) : AccountSource {
     override suspend fun engagement(url: String) = actions.engagement(url)
-    override suspend fun rate(url: String,rating: Rating,previous: Rating) = actions.rate(url,rating,previous).also { if (it is Outcome.Success) clear() }
-    override suspend fun subscribe(channelId: String,subscribe: Boolean) = actions.subscribe(channelId,subscribe).also { if (it is Outcome.Success) clear() }
-    override suspend fun startWatch(url: String,position: Double) = actions.startWatch(url,position)
-    override suspend fun reportWatch(ticket: WatchTicket,segments: List<Pair<Double,Double>>,position: Double,final: Boolean) = actions.reportWatch(ticket,segments,position,final).also { if (it is Outcome.Success) cache.clear() }
-    private val progress = java.util.concurrent.ConcurrentHashMap<String, Long>()
-    private val cache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, VideoPage>>()
-    private var revision = -1L
+    override suspend fun rate(url: String, rating: Rating, previous: Rating) = actions.rate(url, rating, previous).also { if (it is Outcome.Success) cache.clear() }
+    override suspend fun subscribe(channelId: String, subscribe: Boolean) = actions.subscribe(channelId, subscribe).also { if (it is Outcome.Success) cache.clear() }
+    override suspend fun startWatch(url: String, position: Double) = actions.startWatch(url, position)
+    override suspend fun reportWatch(ticket: WatchTicket, segments: List<WatchSegment>, position: Double) = actions.reportWatch(ticket, segments, position).also { if (it is Outcome.Success) cache.clear() }
+    private val progress = ConcurrentHashMap<String, Long>()
+    private val cache = ConcurrentHashMap<String, CachedPage>()
+    @Volatile private var revision = -1L
     override suspend fun feed(feed: AccountFeed, continuation: Continuation?): Outcome<VideoPage> {
         val id = when (feed) {
             AccountFeed.Home -> "FEwhat_to_watch"
@@ -56,23 +60,23 @@ class InnerTubeAccountSource @Inject constructor(private val client: InnerTubeCl
             val cursor = continuation as? AccountCursor
             if (continuation != null && (cursor == null || cursor.browseId != id || cursor.revision != current.revision))
                 return@withContext Outcome.Failure(VideoError.AuthExpired)
-            cache[id]?.takeIf { continuation == null && System.currentTimeMillis() - it.first < 30_000 }
-                ?.let { return@withContext Outcome.Success(it.second) }
+            cache[id]?.takeIf { continuation == null && System.currentTimeMillis() - it.at < 30_000 }
+                ?.let { return@withContext Outcome.Success(it.page) }
             val json = client.browse(if (cursor == null) id else null, cursor?.token)
-            val alerts = json.arr("alerts")?.mapNotNull { (it as? kotlinx.serialization.json.JsonObject)?.obj("alertRenderer") }
+            val alerts = json.arr("alerts")?.mapNotNull { (it as? JsonObject)?.obj("alertRenderer") }
             if (alerts?.any { it.str("type") == "ERROR" } == true) return@withContext Outcome.Failure(VideoError.ContentUnavailable)
             val parsed = AccountPageParser.parse(json)
             if (sessions.status.value.revision != current.revision) return@withContext Outcome.Failure(VideoError.AuthExpired)
             if (parsed.skipped && parsed.videos.isEmpty() && parsed.playlists.isEmpty())
                 return@withContext Outcome.Failure(VideoError.ExtractionBroken)
             parsed.videos.forEach { video -> video.resumePositionMs?.let { progress[video.url] = it } }
-            val result = VideoPage(parsed.videos, parsed.token?.let { AccountCursor(id,it,current.revision) },
+            val result = VideoPage(parsed.videos, parsed.token?.let { AccountCursor(id, it, current.revision) },
                 skippedItems = parsed.skipped, playlists = parsed.playlists)
-            if (continuation == null) cache[id] = System.currentTimeMillis() to result
+            if (continuation == null) cache[id] = CachedPage(System.currentTimeMillis(), result)
             Outcome.Success(result)
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) { Outcome.Failure(InnerTubeClient.errorFor(e)) }
     }
-    fun clear() { progress.clear(); cache.clear() }
+    fun clear() { progress.clear(); cache.clear(); actions.clear() }
     override fun invalidateFeeds() = cache.clear()
 }
