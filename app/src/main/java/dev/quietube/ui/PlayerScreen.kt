@@ -74,7 +74,9 @@ import dev.quietube.account.actions.*
 import dev.quietube.cast.CastState
 import dev.quietube.cast.Tv
 import dev.quietube.data.Rating
+import dev.quietube.data.SkipSegment
 import dev.quietube.data.at
+import dev.quietube.data.manualSegment
 import dev.quietube.playback.PlaybackState
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -98,7 +100,7 @@ internal fun PlayerLayer(sheet: PlayerSheetState, dock: Rect?, state: PlaybackSt
     comments: CommentsState, commentActions: CommentActions, engagement: EngagementState, engagementActions: EngagementActions,
     window: PlayerWindow, appearance: AppearanceSettings, settings: () -> Unit, quality: (Int?) -> Unit, play: (String) -> Unit,
     toggle: () -> Unit, close: () -> Unit, prefetch: (List<String>) -> Unit = {}, cast: CastState = CastState(), castActions: CastActions? = null,
-    snackbar: SnackbarHostState? = null, thumbnailPrefetch: (List<ThumbnailRequest>) -> Unit = {}) {
+    snackbar: SnackbarHostState? = null, thumbnailPrefetch: (List<ThumbnailRequest>) -> Unit = {}, upNext: UpNextActions? = null) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val animate = rememberAnimationsEnabled()
@@ -178,7 +180,7 @@ internal fun PlayerLayer(sheet: PlayerSheetState, dock: Rect?, state: PlaybackSt
         Box(Modifier.layoutId("video").onGloballyPositioned { coordinates ->
             if (sheet.fraction == 1f) coordinates.boundsInWindow().let { window.bounds(AndroidRect(it.left.toInt(), it.top.toInt(), it.right.toInt(), it.bottom.toInt())) }
         }) {
-            PlayerVideo(sheet, state, player, inPip, videoOnly, open, docked, cast, castActions, openCast, window, geometry, share)
+            PlayerVideo(sheet, state, player, inPip, videoOnly, open, docked, cast, castActions, openCast, window, geometry, share, upNext)
         }
         if (!open) MiniCatcher(sheet, state, geometry, close, Modifier.layoutId("catcher"))
         if (docked) MiniControls(state, toggle, close, Modifier.layoutId("mini").graphicsLayer { alpha = (1f - sheet.fraction * 4f).coerceIn(0f, 1f) })
@@ -242,7 +244,7 @@ private class SpeedHold { var normal = 1f; var active = false }
 
 @Composable
 private fun PlayerVideo(sheet: PlayerSheetState, state: PlaybackState, player: Player?, inPip: Boolean, videoOnly: Boolean, open: Boolean, docked: Boolean,
-    cast: CastState, castActions: CastActions?, openCast: () -> Unit, window: PlayerWindow, geometry: LayerGeometry, share: PlayerShare?) {
+    cast: CastState, castActions: CastActions?, openCast: () -> Unit, window: PlayerWindow, geometry: LayerGeometry, share: PlayerShare?, upNext: UpNextActions?) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     var view by remember { mutableStateOf<PlayerView?>(null) }
@@ -302,6 +304,14 @@ private fun PlayerVideo(sheet: PlayerSheetState, state: PlaybackState, player: P
     val chapters = state.chapters
     val markers = remember { arrayOfNulls<Any>(1) }
     val seekable = !live && state.video != null && state.error == null
+    // Show-only SponsorBlock segments offer a Skip while they play.
+    val manual = remember(state.segments, state.autoSkip) { state.segments.filter { it.category !in state.autoSkip } }
+    var offered by remember { mutableStateOf<SkipSegment?>(null) }
+    LaunchedEffect(player, manual) {
+        offered = null
+        if (manual.isEmpty()) return@LaunchedEffect
+        while (player != null) { offered = manualSegment(manual, emptySet(), player.currentPosition); delay(250) }
+    }
     Box(Modifier.fillMaxSize().background(if (flying) Color.Transparent else VideoBlack).semantics {
         if (open && !inPip) {
             contentDescription = "Video"
@@ -315,6 +325,7 @@ private fun PlayerVideo(sheet: PlayerSheetState, state: PlaybackState, player: P
                 })
                 add(CustomAccessibilityAction(if (videoOnly) "Exit fullscreen" else "Enter fullscreen") { window.toggleFullscreen(); true })
                 if (videoOnly) add(CustomAccessibilityAction(if (zoom) "Fit video to screen" else "Zoom video to fill") { zoom = !zoom; true })
+                offered?.let { segment -> add(CustomAccessibilityAction("Skip ${segment.category.label.lowercase()}") { player?.seekTo(segment.endMs); true }) }
                 add(CustomAccessibilityAction("Collapse player") { window.collapse(); true })
             }
         }
@@ -355,11 +366,22 @@ private fun PlayerVideo(sheet: PlayerSheetState, state: PlaybackState, player: P
         if (state.resolving || state.buffering) { if (docked) AppLoadingIndicator(Modifier.size(28.dp)) else PlayerLoadingIndicator() }
         if (open && !inPip) {
             SeekBubble(feedback)
+            val next = state.upNext
+            if (next != null && upNext != null) UpNextCard(next, upNext.playNow, upNext.cancel, Modifier.align(Alignment.Center))
             if (holding) VideoPill("2× ▸▸", Modifier.align(Alignment.TopCenter).padding(top = 56.dp))
             note?.let { VideoPill(it, Modifier.align(Alignment.Center)) }
             val bar = span
             val duration = player?.duration?.takeIf { it > 0 } ?: ((state.video?.durationSeconds ?: 0L) * 1000)
             val scrubbing = scrub
+            androidx.compose.animation.AnimatedVisibility(bar != null && controlsVisible && state.segments.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
+                // Follows the scrubber every frame while shown; read only when drawing, so nothing recomposes.
+                val thumb = remember { mutableLongStateOf(0L) }
+                LaunchedEffect(player) { while (true) withFrameMillis { thumb.longValue = scrub ?: player?.currentPosition ?: 0L } }
+                if (bar != null) SegmentMarks(state.segments, duration, bar, { thumb.longValue })
+            }
+            offered?.let { segment ->
+                if (!controlsVisible && scrubbing == null) SkipPill(segment, { player?.seekTo(segment.endMs) }, Modifier.align(Alignment.BottomEnd).padding(12.dp))
+            }
             if (bar != null && scrubbing != null && (state.storyboard != null || chapters.isNotEmpty()))
                 ScrubPreview(state.storyboard, chapters, scrubbing, duration, bar)
             else if (bar != null && controlsVisible && chapters.isNotEmpty()) {
@@ -412,8 +434,9 @@ private fun Poster(share: PlayerShare) {
 private fun MiniCatcher(sheet: PlayerSheetState, state: PlaybackState, geometry: LayerGeometry, close: () -> Unit, modifier: Modifier) {
     val scope = rememberCoroutineScope()
     val currentClose by rememberUpdatedState(close)
+    val title = state.video?.let { displayTitle(it.url, it.title) }
     Box(modifier.semantics {
-        contentDescription = listOfNotNull(state.video?.title, state.video?.channel?.takeIf(String::isNotBlank)).joinToString(", ")
+        contentDescription = listOfNotNull(title, state.video?.channel?.takeIf(String::isNotBlank)).joinToString(", ")
         role = Role.Button
         onClick("Expand player") { sheet.settle(scope, true); true }
         customActions = listOf(CustomAccessibilityAction("Close player") { currentClose(); true })
@@ -453,7 +476,7 @@ private fun MiniCatcher(sheet: PlayerSheetState, state: PlaybackState, geometry:
 private fun MiniControls(state: PlaybackState, toggle: () -> Unit, close: () -> Unit, modifier: Modifier) {
     Row(modifier.padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(horizontal = 12.dp).clearAndSetSemantics {}) {
-            Text(state.video?.title.orEmpty(), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(state.video?.let { displayTitle(it.url, it.title) }.orEmpty(), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(state.video?.channel.orEmpty(), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -474,7 +497,7 @@ private fun PlayerDetails(state: PlaybackState, connectionError: Boolean, commen
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { stateDescription = if (detailsExpanded) "Expanded" else "Collapsed" }
             .clickable(role = Role.Button, onClick = toggleDetails).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                Text(state.video?.title ?: "Choose a video from search", style = MaterialTheme.typography.titleMedium, maxLines = 2,
+                Text(state.video?.let { displayTitle(it.url, it.title) } ?: "Choose a video from search", style = MaterialTheme.typography.titleMedium, maxLines = 2,
                     overflow = TextOverflow.Ellipsis)
             }
             Icon(if (detailsExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null)
@@ -506,7 +529,7 @@ private fun timeBarSpan(bar: View, root: View): TimeBarSpan {
     while (view != null && view !== root) { x += view.left; y += view.top; view = view.parent as? View }
     // DefaultTimeBar insets its track by half the dragged scrubber (16dp).
     val inset = 8 * bar.resources.displayMetrics.density
-    return TimeBarSpan(x + bar.paddingLeft + inset, x + bar.width - bar.paddingRight - inset, y)
+    return TimeBarSpan(x + bar.paddingLeft + inset, x + bar.width - bar.paddingRight - inset, y, y + bar.height)
 }
 
 /** A control drawn over the video; white whatever the theme. */
@@ -517,6 +540,7 @@ private fun OverlayButton(onClick: () -> Unit, enabled: Boolean = true, content:
 private const val LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
 private const val CHAPTER_GAP = 0x99000000.toInt()
 
+class UpNextActions(val playNow: () -> Unit, val cancel: () -> Unit)
 class CommentActions(val more: () -> Unit, val refresh: () -> Unit, val pullRefresh: () -> Unit)
 class EngagementActions(val rate: (Rating) -> Unit, val subscribe: () -> Unit, val refresh: () -> Unit)
 /** What the player asks of its window: collapsing, picture-in-picture, rotation, where the video sits (for the PiP animation) and whether a sheet covers it. */

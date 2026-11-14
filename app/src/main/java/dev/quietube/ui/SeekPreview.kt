@@ -34,7 +34,7 @@ import dev.quietube.data.frameAt
 import kotlin.math.roundToInt
 
 /** Where Media3's time bar draws its track inside the PlayerView, in pixels. */
-internal data class TimeBarSpan(val left: Float, val right: Float, val top: Float)
+internal data class TimeBarSpan(val left: Float, val right: Float, val top: Float, val bottom: Float = top)
 
 internal fun scrubX(span: TimeBarSpan, position: Long, duration: Long): Float =
     if (duration <= 0) span.left else span.left + (span.right - span.left) * (position.toFloat() / duration).coerceIn(0f, 1f)

@@ -11,10 +11,18 @@ import dev.quietube.account.actions.YouTubeActions
 import dev.quietube.account.oauth.DeviceLogin
 import dev.quietube.account.oauth.DevicePoll
 import dev.quietube.account.oauth.TvOAuthClient
+import dev.quietube.data.CalmOption
+import dev.quietube.data.CalmPreferences
+import dev.quietube.data.CalmSettings
 import dev.quietube.data.DefaultVideoRepository
 import dev.quietube.data.Outcome
 import dev.quietube.data.Profile
+import dev.quietube.data.SegmentCategory
+import dev.quietube.data.SegmentMode
+import dev.quietube.data.ThirdPartyPreferences
+import dev.quietube.data.ThirdPartySettings
 import dev.quietube.data.VideoError
+import dev.quietube.playback.ContinueShortcut
 import dev.quietube.playback.ResumeDao
 import dev.quietube.ui.AppearancePreferences
 import dev.quietube.ui.SearchHistory
@@ -48,12 +56,21 @@ class AccountViewModel @Inject constructor(
     private val thumbnails: ThumbnailPrefetcher,
     private val appearancePreferences: AppearancePreferences,
     private val actions: YouTubeActions,
+    private val thirdPartyPreferences: ThirdPartyPreferences,
+    private val calmPreferences: CalmPreferences,
+    private val continueShortcut: ContinueShortcut,
 ) : ViewModel() {
     val appearance = appearancePreferences.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     fun themeMode(mode: ThemeMode) { viewModelScope.launch { appearancePreferences.mode(mode) } }
     fun wallpaper(enabled: Boolean) { viewModelScope.launch { appearancePreferences.wallpaper(enabled) } }
     fun ambient(enabled: Boolean) { viewModelScope.launch { appearancePreferences.ambient(enabled) } }
     fun videoColours(enabled: Boolean) { viewModelScope.launch { appearancePreferences.videoColours(enabled) } }
+    val thirdParty = thirdPartyPreferences.settings.stateIn(viewModelScope, SharingStarted.Eagerly, ThirdPartySettings())
+    fun sponsorBlock(enabled: Boolean) { viewModelScope.launch { thirdPartyPreferences.sponsorBlock(enabled) } }
+    fun segmentMode(category: SegmentCategory, mode: SegmentMode) { viewModelScope.launch { thirdPartyPreferences.mode(category, mode) } }
+    fun deArrow(enabled: Boolean) { viewModelScope.launch { thirdPartyPreferences.deArrow(enabled) } }
+    val calm = calmPreferences.settings.stateIn(viewModelScope, SharingStarted.Eagerly, CalmSettings())
+    fun calm(option: CalmOption, enabled: Boolean) { viewModelScope.launch { calmPreferences.set(option, enabled) } }
     val session = sessions.status
     private val mutable = MutableStateFlow(AccountUiState())
     val ui = mutable.asStateFlow()
@@ -195,6 +212,7 @@ class AccountViewModel @Inject constructor(
                 sessions.clear()
                 client.clear(); source.clear(); repository.clearLocalFeed()
                 positions.clear()
+                continueShortcut.remove()
                 withContext(Dispatchers.IO) {
                     SingletonImageLoader.get(context).memoryCache?.clear()
                     SingletonImageLoader.get(context).diskCache?.clear()

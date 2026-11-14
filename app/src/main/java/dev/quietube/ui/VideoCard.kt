@@ -5,7 +5,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Image
@@ -25,7 +26,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import dev.quietube.data.Video
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalFoundationApi::class)
 @Composable
 internal fun VideoCard(video: Video, onClick: () -> Unit) {
     // Feeds return 320px thumbnails; prefer the 1280px one, which older uploads and live streams may lack.
@@ -36,15 +37,20 @@ internal fun VideoCard(video: Video, onClick: () -> Unit) {
     var decoded by remember(video.url) { mutableStateOf<coil3.Image?>(null) }
     val image = if (fallback) video.thumbnailUrl else highRes
     val share = LocalPlayerShare.current
-    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = videoLabel(video) }
-        .clickable { share?.source(video.url, image.takeIf { loaded }, decoded); onClick() }.padding(horizontal = 20.dp)) {
+    val title = displayTitle(video.url, video.title)
+    val calm = LocalCalm.current
+    var menu by remember { mutableStateOf(false) }
+    if (menu) VideoMenu(video, title) { menu = false }
+    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = videoLabel(video, title, calm.hideViews) }
+        .combinedClickable(onLongClickLabel = "More options", onLongClick = { menu = true }) { share?.source(video.url, image.takeIf { loaded }, decoded); onClick() }
+        .padding(horizontal = 20.dp)) {
         Column(Modifier.clearAndSetSemantics {}) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(MaterialTheme.shapes.large).background(MaterialTheme.colorScheme.surfaceContainer)) {
             // Drawn underneath, so the image covers it once loaded; a placeholder painter would be cropped.
             if (!loaded) Icon(if (failed) Icons.Rounded.ImageNotSupported else Icons.Rounded.Image,
                 null, Modifier.align(Alignment.Center), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             val thumbnail = @Composable { modifier: Modifier ->
-                AsyncImage(image, null, modifier.fillMaxSize(), contentScale = ContentScale.Crop, onSuccess = { loaded = true; decoded = it.result.image },
+                AsyncImage(image, null, modifier.fillMaxSize(), contentScale = ContentScale.Crop, colorFilter = GreyThumbnail.takeIf { calm.greyThumbnails }, onSuccess = { loaded = true; decoded = it.result.image },
                     onError = { if (!fallback) fallback = true else failed = true })
             }
             // While this video opens, its thumbnail is flying to (or resting in) the player.
@@ -62,9 +68,9 @@ internal fun VideoCard(video: Video, onClick: () -> Unit) {
                 modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
                     .background(MaterialTheme.colorScheme.scrim.copy(alpha = .8f), MaterialTheme.shapes.extraSmall).padding(horizontal = 6.dp, vertical = 3.dp))
         }
-        Text(video.title, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium,
+        Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium,
             style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
-        Text(listOfNotNull(video.channel.takeIf(String::isNotBlank), formatViews(video.viewCount), video.published)
+        Text(listOfNotNull(video.channel.takeIf(String::isNotBlank), formatViews(video.viewCount).takeUnless { calm.hideViews }, video.published)
             .joinToString(" · "), color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 5.dp))

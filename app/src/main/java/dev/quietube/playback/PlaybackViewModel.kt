@@ -12,6 +12,7 @@ import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.quietube.data.Video
 import dev.quietube.links.linkStartMs
 import dev.quietube.links.parseYouTubeLink
 import javax.inject.Inject
@@ -43,7 +44,15 @@ class PlaybackViewModel @Inject constructor(@ApplicationContext context: Context
             }
         }, ContextCompat.getMainExecutor(context))
     }
+    /** The rest of the playlist the next [play] comes from, for autoplay; consumed by that call. */
+    private var pendingQueue: List<Video>? = null
+    fun queueNext(videos: List<Video>) { pendingQueue = videos }
     fun play(url: String) { command(PlaybackService.PLAY_VIDEO, Bundle().apply {
+        pendingQueue?.let { queue ->
+            putStringArrayList("queue", ArrayList(queue.map { it.url }))
+            putStringArrayList("queue_titles", ArrayList(queue.map { it.title }))
+        }
+        pendingQueue = null
         val canonical = parseYouTubeLink(url)
         putString("url", canonical?.substringBefore("&t=") ?: url)
         canonical?.let { linkStartMs(it) }?.let { putLong("start_ms", it) }
@@ -58,6 +67,9 @@ class PlaybackViewModel @Inject constructor(@ApplicationContext context: Context
         }
     }
     fun close() { command(PlaybackService.CLOSE, Bundle.EMPTY) }
+    fun playNext() { command(PlaybackService.PLAY_NEXT, Bundle.EMPTY) }
+    fun cancelNext() { command(PlaybackService.CANCEL_NEXT, Bundle.EMPTY) }
+    fun undoSkip(serial: Int) { command(PlaybackService.UNDO_SKIP, Bundle().apply { putInt("serial", serial) }) }
     fun toggle() { mutableController.value?.let { if (it.playWhenReady) it.pause() else it.play() } }
     override fun onCleared() {
         MediaController.releaseFuture(future)

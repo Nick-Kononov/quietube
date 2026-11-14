@@ -88,6 +88,7 @@ fun FeedScreen(state: FeedState, session: SessionStatus,
                 StatusMessage(Icons.Rounded.AccountCircle, state.feed.label(), "Sign in to see your ${state.feed.label().lowercase()}.", "Sign in", account)
                 return@Column
             }
+            val markCaughtUp = LocalCalm.current.caughtUp
             RefreshBox(refreshing = state.refreshing, refresh = pullRefresh, modifier = Modifier.fillMaxSize()) {
             if (restoring) Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) { repeat(3) { VideoCardPlaceholder() } }
             else LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -101,7 +102,14 @@ fun FeedScreen(state: FeedState, session: SessionStatus,
                         leadingContent = { AsyncImage(item.thumbnailUrl, null, Modifier.width(120.dp).aspectRatio(16f / 9f).clip(MaterialTheme.shapes.small), contentScale = ContentScale.Crop) },
                         modifier = Modifier.clickable(role = Role.Button) { playlist(item) })
                 }
-                items(state.videos, key = { it.url }, contentType = { "video" }) { video -> VideoCard(video) { play(video.url) } }
+                // Subscriptions can mark where the videos already watched here begin.
+                val caughtUp = if (markCaughtUp && state.feed == AccountFeed.Subscriptions && state.playlist == null) caughtUpIndex(state.videos) else null
+                if (caughtUp == null) items(state.videos, key = { it.url }, contentType = { "video" }) { video -> VideoCard(video) { play(video.url) } }
+                else {
+                    items(state.videos.subList(0, caughtUp), key = { it.url }, contentType = { "video" }) { video -> VideoCard(video) { play(video.url) } }
+                    item(key = "caught-up", contentType = "caught-up") { CaughtUpMarker() }
+                    items(state.videos.subList(caughtUp, state.videos.size), key = { it.url }, contentType = { "video" }) { video -> VideoCard(video) { play(video.url) } }
+                }
                 state.error?.let { error -> item {
                     StatusMessage(Icons.Rounded.CloudOff, "Feed unavailable", error.message(),
                         if (error == VideoError.AuthExpired) "Open account" else "Try again", if (error == VideoError.AuthExpired) account else retry)
