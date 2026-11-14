@@ -893,3 +893,51 @@ samples at a real 120 Hz, and the owner confirmed the visible flicker is gone.
 The PiP check rendered zero UI frames over two seconds with its refresh preference
 cleared. All 154 offline tests and builds passed, with no new lint findings.
 Temporary stay-awake was restored; global adaptive refresh remains enabled.
+
+## Review fixes and restructuring (unreleased)
+
+A read-through of the whole app found four defects, several avoidable requests
+and a few structures that had grown hard to read. Nothing here adds a feature,
+dependency, permission or network destination.
+
+Fixed behaviour:
+
+- Feed paging: a failed "load more" used to be requested again as soon as it
+  failed, for as long as the end of the list was on screen. Signed in, that was
+  one request per second against an account that may already be rate-limited.
+  Automatic paging now waits while an error is shown; "Try again" and "Load
+  more" still work.
+- Direct casting: dismissing the cast sheet or rescanning while a send was in
+  progress cancelled the send but left its stream, foreground service and wake
+  lock running with nothing in the UI to stop them. A cancelled or failed send
+  now ends the stream it started, and a cast cancelled before its stream exists
+  never replaces the one already playing.
+- Liking or subscribing cleared the account's resume positions along with the
+  feed cache. Only the feed cache is cleared now.
+- Playlist and related videos now recognise audio-only live streams, as search
+  already did.
+
+Fewer requests. Opening a video signed in fetched the account `player` response
+twice (once for engagement, once for history tracking), each a second apart
+behind the account request lock. The two callers now share one response for up
+to a minute; a second watch of the same video still fetches its own tracking
+URLs. The response is held in memory only, tied to the session revision and
+dropped on sign-out. Changing a sync setting no longer reloads the playing
+video's account details, and the dislike estimate no longer waits for them.
+Resume positions are pruned once per service start rather than on every save.
+
+Privacy-relevant details: the direct-stream failure log now records only the
+exception type, because a source error's message can quote the URL it failed
+on. The unused `final` flag is gone from watch reporting, so the TV client's
+"mark whole video watched" shortcut cannot be sent by mistake.
+
+Structure: `MainActivity` is an `App` composable plus one composable per
+destination; `PlayerScreen` takes grouped actions; `AccountPageParser` has a
+function per renderer kind; feed selection storage lives in `FeedPreferences`;
+JSON helpers, YouTube ID patterns and watch segments each have one definition.
+
+`assembleDebug`, the offline unit tests (including new ones for paging,
+engagement settings and the JSON walk) and lint pass with no new findings. None
+of this was checked on a device: the cast and paging fixes in particular were
+verified by reading and unit tests only, and want a manual pass with a TV and a
+failing network before release.

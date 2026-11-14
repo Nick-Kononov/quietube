@@ -1,6 +1,5 @@
 package dev.quietube.cast
 
-import android.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -30,7 +29,7 @@ class StreamService : Service() {
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "Playing on TV", NotificationManager.IMPORTANCE_LOW))
         val stop = PendingIntent.getService(this, 0, Intent(this, StreamService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE)
-        val notification = Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_media_play)
+        val notification = Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle("Playing on ${intent?.getStringExtra(EXTRA_TV) ?: "TV"}")
             .setContentText("This phone is streaming the video. Keep it on the same Wi-Fi.")
             .addAction(Notification.Action.Builder(null, "Stop", stop).build()).setOngoing(true).build()
