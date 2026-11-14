@@ -22,6 +22,8 @@ data class PlaybackDetails(
     val dashUrl: String? = null,
     val related: List<Video> = emptyList(),
     val description: String? = null,
+    val chapters: List<Chapter> = emptyList(),
+    val storyboard: Storyboard? = null,
 )
 data class StreamSelection(val video: StreamVariant, val audio: StreamVariant? = null)
 
