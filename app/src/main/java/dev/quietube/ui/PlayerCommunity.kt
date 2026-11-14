@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -36,7 +37,8 @@ internal fun PlayerCommunity(comments: CommentsState, more: () -> Unit, refresh:
     }
     val scope = rememberCoroutineScope()
     Column(modifier.fillMaxWidth()) {
-        PrimaryTabRow(selectedTabIndex = pager.currentPage) {
+        // Transparent over the player's own background, so ambient mode fades out behind the tabs instead of stopping at them.
+        PrimaryTabRow(selectedTabIndex = pager.currentPage, containerColor = Color.Transparent) {
             Tab(selected = pager.currentPage == 0, onClick = { scope.launch { pager.animateScrollToPage(0) } },
                 text = { Text("Comments${comments.total?.let { " · $it" } ?: ""}", maxLines = 1) })
             Tab(selected = pager.currentPage == 1, onClick = { scope.launch { pager.animateScrollToPage(1) } }, text = { Text("Related videos") })

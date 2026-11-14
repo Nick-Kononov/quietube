@@ -192,7 +192,7 @@ class PlaybackService : MediaSessionService() {
             .setPreferredAudioRoleFlags(C.ROLE_FLAG_MAIN)
             .setMaxVideoSize(Int.MAX_VALUE, height).setForceHighestSupportedBitrate(true).build()
         store.mutable.value = PlaybackState(video = value.video, related = value.related, description = value.description,
-            qualities = StreamSelector.qualities(value), manualQuality = quality,
+            chapters = value.chapters, storyboard = value.storyboard, qualities = StreamSelector.qualities(value), manualQuality = quality,
             selectedHeight = selected.video.height, buffering = true, playWhenReady = play)
         player.setMediaSource(combined, start.coerceAtLeast(0))
         player.prepare()

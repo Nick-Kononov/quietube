@@ -1182,3 +1182,70 @@ release or change signing.
 warnings with no errors. The debug APK metadata reports versionName 0.5.10 and
 versionCode 21. No device was connected, so no installation or on-device check
 was run for this metadata-only change.
+
+## UI refresh — Phase 6 (0.6.0)
+
+The player is no longer a navigation route. `PlayerLayer` draws one layer over
+the app with a single PlayerView, which moves between the full player and the
+mini player docked above the navigation bar as the sheet's fraction changes. A
+drag from either end follows the finger and settles by fling or nearer end;
+the docked player swipes sideways to close. Back collapses the full player
+and follows the predictive-back gesture to half-way; the app's own back
+preview ignores gestures while the player covers it. The video surface is moved
+by layout placement, not a graphics layer, because a SurfaceView ignores layer
+transforms. The fraction is read only in layout and draw, so a drag doesn't
+recompose the player. Settings opened from the description collapses the
+player first. Fullscreen still follows rotation, and Back there collapses the
+player. Collapse and expand use a critically damped spring four times stiffer than
+Material's MediumLow, which settles in half the time; the owner found the
+first version too slow on the release build.
+
+Opening a card flies its thumbnail into the video area as a shared element; it
+stays as a poster until playback starts, fails or is paused, at most 20 s. The
+layer's first frame is slow (the whole player composes), so the flight waits
+until it has drawn once. Started earlier, the thumbnail sat on the card for
+that frame and then jumped. The card's already-decoded image is drawn
+directly, so the flying copy isn't blank while Coil loads it again.
+
+Gestures run in a plain View inside PlayerView's overlay frame, beneath the
+Media3 controller, so the controller's buttons keep their touches. Feedback is
+drawn in Compose. Double-tapping a side third seeks 10 s and further taps
+within 700 ms add up; holding plays at 2× until release; a vertical swipe
+enters or leaves fullscreen or collapses; pinching in fullscreen switches
+between fit and zoom. TalkBack gets the same actions as custom actions on the
+video, and the mini player offers Expand and Close.
+
+Chapters (stream segments) are drawn as Media3's extra ad-group markers,
+which give the time bar its gaps. The current chapter is labelled above the
+bar, and scrubbing shows the chapter, the time and a storyboard frame.
+Chapters need at least two valid entries; live videos get neither chapters
+nor storyboards. Parsing failures drop only that feature, not playback.
+
+Ambient mode blurs a tiny copy of the thumbnail behind the player in dark
+theme on Android 12+, portrait only, and not in PiP or Battery Saver. The tab
+row is transparent so the glow fades out behind it. The video's colours come
+from Material's quantizer and content scheme on a 112 × 63 thumbnail, off the
+main thread with a small cache. Only the accent roles are replaced; surfaces,
+background and error colours stay the app's, so contrast is unchanged. Both
+features have Settings switches, on by default.
+
+Privacy: the new dependency is
+`com.materialkolor:material-color-utilities:6.0.0` (approved by the owner),
+which does pure colour maths with no network access. Storyboard sprites load
+through the existing anonymous Coil loader with the disk cache disabled, so
+their signed URLs stay in memory (playback state and Coil's memory cache) like
+stream URLs. Chapters and storyboards come from the anonymous extractor
+response the player already fetched; there's no new request type, destination
+or setting that sends data anywhere.
+
+Verification: `assembleDebug testDebugUnitTest lintDebug` and
+`assembleSamples` pass offline. All 186 JVM tests pass, 23 of them new
+(timeline parsing, sheet maths and settling, gesture helpers, scrub placement,
+ambient conditions, card/player matching and colour extraction). Lint lists 33
+entries, all in unchanged code or dependency-version notices. Pixel 8 checks
+ran on the signed-out samples installation; they are listed in
+[the Phase 6 report](ui-refresh/phase6-report.md), along with what wasn't
+checked. The samples installation was removed afterwards and device settings
+were restored. Phase 7 has not started.
+
+Bumped versionCode from 21 to 22 and versionName to 0.6.0 for this release.

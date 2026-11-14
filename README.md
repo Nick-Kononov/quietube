@@ -18,7 +18,12 @@ YouTube session encrypted on the device. On the home screen the app is named
   work. Quality is chosen by connection (1080p on Wi-Fi, 720p otherwise) and
   can be overridden. Live streams play over HLS.
 - **Picture-in-picture, mini player and fullscreen**, with local resume
-  positions stored in Room.
+  positions stored in Room. Drag the player down into the mini player (or use
+  Back) and up again; a card's thumbnail flies into the player as it opens.
+  Double-tap the sides to seek 10 s, hold for 2× speed, swipe up or down for
+  fullscreen and pinch to fill the screen. Chapters and storyboard previews
+  show on the seek bar. The player's accents take the thumbnail's colours, and
+  in dark theme an ambient glow of the video sits behind it (both optional).
 - **Optional YouTube account**: sign in through an isolated WebView, an
   experimental TV device-code flow, or a Netscape `cookies.txt` import. You
   then get Home, Subscriptions, History, Watch Later, Liked videos and

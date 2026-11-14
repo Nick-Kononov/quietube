@@ -8,10 +8,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 
 @Composable
-internal fun AppNavigation(selected: TopDestination, hidden: Boolean, rail: Boolean, select: (TopDestination) -> Unit, content: @Composable () -> Unit) {
-    NavigationSuiteScaffold(layoutType = if (hidden) NavigationSuiteType.None else if (rail) NavigationSuiteType.NavigationRail else NavigationSuiteType.NavigationBar,
+internal fun AppNavigation(selected: TopDestination, hidden: Boolean, rail: Boolean, select: (TopDestination) -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    NavigationSuiteScaffold(modifier = modifier, layoutType = if (hidden) NavigationSuiteType.None else if (rail) NavigationSuiteType.NavigationRail else NavigationSuiteType.NavigationBar,
         navigationSuiteItems = { TopDestination.entries.forEach { destination ->
             item(selected = selected == destination, onClick = { select(destination) }, label = { Text(destination.label) }, icon = {
                 Icon(when (destination) { TopDestination.Home -> Icons.Rounded.Home; TopDestination.Subscriptions -> Icons.Rounded.Subscriptions; TopDestination.Library -> Icons.Rounded.VideoLibrary }, null)

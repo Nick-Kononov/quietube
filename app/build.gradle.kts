@@ -13,8 +13,8 @@ android {
         applicationId = "dev.quietube"
         minSdk = 26
         targetSdk = 37
-        versionCode = 21
-        versionName = "0.5.10"
+        versionCode = 22
+        versionName = "0.6.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
@@ -69,6 +69,7 @@ dependencies {
     implementation("org.jsoup:jsoup:1.23.2") // Same version already used by NewPipe; plain comment text from HTML.
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    implementation("com.materialkolor:material-color-utilities:6.0.0") // Material's quantizer and content scheme for the player's video colours.
     implementation("androidx.datastore:datastore-preferences:1.1.7")
     val media3 = "1.11.1"
     implementation("androidx.media3:media3-exoplayer:$media3")

@@ -119,8 +119,20 @@ class NewPipeAnonymousSource @Inject constructor(private val downloader: Extract
             }
             val related = info.relatedItems.filterIsInstance<StreamInfoItem>()
                 .mapNotNull { item -> try { item.toVideo() } catch (_: Exception) { null } }.distinctBy { it.url }
+            val durationMs = info.duration * 1000
+            // Chapters and previews are extras: a parser change there must not cost playback.
+            val chapters = try {
+                normalizeChapters(info.streamSegments.orEmpty().mapNotNull { s -> s.title?.let { Chapter(it, s.startTimeSeconds * 1000L) } }, durationMs)
+            } catch (_: Exception) { emptyList() }
+            val storyboard = try {
+                chooseStoryboard(info.previewFrames.orEmpty().map { f ->
+                    Storyboard(f.urls.orEmpty(), f.frameWidth, f.frameHeight, f.totalCount,
+                        f.durationPerFrame.toLong().takeIf { it > 0 } ?: (durationMs / f.totalCount.coerceAtLeast(1)), f.framesPerPageX, f.framesPerPageY)
+                })
+            } catch (_: Exception) { null }
             val details = PlaybackDetails(video, videos, audio, info.hlsUrl?.takeIf { it.isNotBlank() },
-                info.dashMpdUrl?.takeIf { it.isNotBlank() }, related, videoDescription(info.description))
+                info.dashMpdUrl?.takeIf { it.isNotBlank() }, related, videoDescription(info.description),
+                chapters.takeUnless { video.isLive }.orEmpty(), storyboard.takeUnless { video.isLive })
             if (StreamSelector.select(details, 1080) == null) Outcome.Failure(VideoError.ContentUnavailable)
             else Outcome.Success(details)
         } catch (e: CancellationException) { throw e }

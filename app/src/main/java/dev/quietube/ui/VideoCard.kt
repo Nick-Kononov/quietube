@@ -1,5 +1,9 @@
 package dev.quietube.ui
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,22 +25,33 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import dev.quietube.data.Video
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 internal fun VideoCard(video: Video, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = videoLabel(video) }.clickable(onClick = onClick).padding(horizontal = 20.dp)) {
+    // Feeds return 320px thumbnails; prefer the 1280px one, which older uploads and live streams may lack.
+    val highRes = remember(video.url) { highResThumbnail(video.url) }
+    var fallback by remember(video.url) { mutableStateOf(highRes == null) }
+    var failed by remember(video.url) { mutableStateOf(false) }
+    var loaded by remember(video.url) { mutableStateOf(false) }
+    var decoded by remember(video.url) { mutableStateOf<coil3.Image?>(null) }
+    val image = if (fallback) video.thumbnailUrl else highRes
+    val share = LocalPlayerShare.current
+    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = videoLabel(video) }
+        .clickable { share?.source(video.url, image.takeIf { loaded }, decoded); onClick() }.padding(horizontal = 20.dp)) {
         Column(Modifier.clearAndSetSemantics {}) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(MaterialTheme.shapes.large).background(MaterialTheme.colorScheme.surfaceContainer)) {
-            // Feeds return 320px thumbnails; prefer the 1280px one, which older uploads and live streams may lack.
-            val highRes = remember(video.url) { highResThumbnail(video.url) }
-            var fallback by remember(video.url) { mutableStateOf(highRes == null) }
-            var failed by remember(video.url) { mutableStateOf(false) }
-            var loaded by remember(video.url) { mutableStateOf(false) }
             // Drawn underneath, so the image covers it once loaded; a placeholder painter would be cropped.
             if (!loaded) Icon(if (failed) Icons.Rounded.ImageNotSupported else Icons.Rounded.Image,
                 null, Modifier.align(Alignment.Center), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            AsyncImage(if (fallback) video.thumbnailUrl else highRes, null, Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop, onSuccess = { loaded = true },
-                onError = { if (!fallback) fallback = true else failed = true })
+            val thumbnail = @Composable { modifier: Modifier ->
+                AsyncImage(image, null, modifier.fillMaxSize(), contentScale = ContentScale.Crop, onSuccess = { loaded = true; decoded = it.result.image },
+                    onError = { if (!fallback) fallback = true else failed = true })
+            }
+            // While this video opens, its thumbnail is flying to (or resting in) the player.
+            if (share == null) thumbnail(Modifier)
+            else androidx.compose.animation.AnimatedVisibility(!(share.departed && sameVideo(share.opening?.url, video.url)), enter = EnterTransition.None, exit = fadeOut(tween(FLIGHT_MS))) {
+                with(share.scope) { thumbnail(Modifier.sharedElement(rememberSharedContentState(sharedThumbnailKey(video.url)), this@AnimatedVisibility, FlightBounds)) }
+            }
             val duration = if (video.isLive) "LIVE" else formatDuration(video.durationSeconds)
             watchedFraction(video.resumePositionMs, video.durationSeconds, video.isLive)?.let { fraction ->
                 Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(3.dp).background(MaterialTheme.colorScheme.scrim.copy(alpha = .35f))) {

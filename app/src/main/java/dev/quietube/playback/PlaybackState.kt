@@ -1,5 +1,7 @@
 package dev.quietube.playback
 
+import dev.quietube.data.Chapter
+import dev.quietube.data.Storyboard
 import dev.quietube.data.Video
 import dev.quietube.data.VideoError
 import javax.inject.Inject
@@ -21,6 +23,8 @@ data class PlaybackState(
     val error: VideoError? = null,
     val description: String? = null,
     val syncMessage: String? = null,
+    val chapters: List<Chapter> = emptyList(),
+    val storyboard: Storyboard? = null,
 )
 @Singleton
 class PlaybackStateStore @Inject constructor() {
