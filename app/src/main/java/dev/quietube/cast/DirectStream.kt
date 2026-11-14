@@ -133,7 +133,7 @@ internal class DirectStream(private val sources: DataSource.Factory, private val
             while (!closed && (nextVideo != null || nextAudio != null)) {
                 val takeVideo = nextVideo != null && (nextAudio == null || nextVideo.timeUs <= nextAudio.timeUs)
                 if (takeVideo) {
-                    val video = nextVideo!!
+                    val video = nextVideo
                     writer.write(1, (video.timeUs - file.originUs) / 1000, video.keyframe,
                         if (avc) MatroskaWriter.lengthPrefixed(video.data) else video.data)
                     nextVideo = videoReader.next()
