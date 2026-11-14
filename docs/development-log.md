@@ -1134,3 +1134,39 @@ setup work before merging; it is not evidence that production cookie rotation
 is broken, and the authentication assertions were not weakened. No device was
 connected, so on-device playback, casting, database upgrade and image-loading
 checks were not run. No app release was published.
+
+## OkHttp 5 platform migration
+
+The OkHttp 5.5.1 update initially failed three cookie-rotation tests because
+Android unit-test classpaths selected OkHttp's Android artifact. Its public
+suffix list lives in Android assets and needs an initialized application
+context; plain JVM tests have neither. Unit-test compile and runtime
+configurations now substitute OkHttp's JVM artifact at the same pinned version.
+The substitution is scoped to those configurations, leaving app and device-test
+dependencies on Android. No new test framework, simulated context, internal
+OkHttp hook or weakened cookie assertion is needed. OkHttp and the existing
+MockWebServer compatibility artifact share one version constant.
+
+OkHttp 5's response body is non-null, including empty HTTP responses. Account,
+OAuth, dislike-estimate, extractor and Lounge response readers now use that
+contract directly, removing redundant null checks and assertions. Status/error
+handling and the dislike response-size cap are unchanged. Credential routing,
+redirect restrictions, cookie isolation, call timeouts and log behaviour are
+unchanged; no new network service is enabled.
+
+The Android library supplies an unexported AndroidX Startup provider entry to
+initialize OkHttp's application context and a bundled public-suffix asset.
+Those entries are present in both merged app manifests. Initialization needs
+no account data and introduces no additional network destination. The JVM
+tests use the equivalent classpath resource instead of reading Android assets.
+
+Verification: `assembleDebug testDebugUnitTest lintDebug assembleRelease`
+passed. All 163 existing tests, including all eight cookie-rotation tests,
+passed without changing their assertions. Compilation reported no warnings;
+lint reported 32 existing warnings, down from 34, with no errors or new code
+findings. The debug and R8 release APKs contain the Android suffix asset and
+startup metadata, and neither contains the JVM suffix resource. Dependency
+inspection confirmed the JVM implementation on debug unit-test compile/runtime
+classpaths and the Android implementation on debug/release app runtimes.
+No device was connected, so Android startup, signed-in requests, playback and
+casting were not checked on a device. No APK was installed or release published.

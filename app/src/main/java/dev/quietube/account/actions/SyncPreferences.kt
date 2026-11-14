@@ -43,7 +43,7 @@ class DislikeEstimates @Inject constructor() {
             http.newCall(Request.Builder().url("https://returnyoutubedislikeapi.com/votes?videoId=$id").build()).execute().use { response ->
                 if (!response.isSuccessful) return@withContext null
                 // A few hundred bytes are expected; never buffer an arbitrarily large third-party body.
-                val body = response.body ?: return@withContext null
+                val body = response.body
                 if (body.contentLength() > MAX_BODY) return@withContext null
                 val bytes = body.source().apply { request(MAX_BODY + 1) }.buffer
                 if (bytes.size > MAX_BODY) return@withContext null

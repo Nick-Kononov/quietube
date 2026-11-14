@@ -168,7 +168,7 @@ class TvOAuthClient @Inject constructor(@TvHttp private val http: OkHttpClient, 
         if (!response.isSuccessful && !(allowOAuthError && response.code in setOf(400, 403, 428))) throw AccountFailure(when(response.code) {
             401, 403 -> VideoError.AuthExpired; 429 -> VideoError.RateLimited; else -> VideoError.Network
         })
-        response.body?.string() ?: throw AccountFailure(VideoError.ExtractionBroken)
+        response.body.string()
     }
     fun cancelNetwork() { http.dispatcher.cancelAll() }
     companion object {
