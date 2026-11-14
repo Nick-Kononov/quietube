@@ -52,6 +52,8 @@ class AccountViewModel @Inject constructor(
     val appearance = appearancePreferences.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     fun themeMode(mode: ThemeMode) { viewModelScope.launch { appearancePreferences.mode(mode) } }
     fun wallpaper(enabled: Boolean) { viewModelScope.launch { appearancePreferences.wallpaper(enabled) } }
+    fun ambient(enabled: Boolean) { viewModelScope.launch { appearancePreferences.ambient(enabled) } }
+    fun videoColours(enabled: Boolean) { viewModelScope.launch { appearancePreferences.videoColours(enabled) } }
     val session = sessions.status
     private val mutable = MutableStateFlow(AccountUiState())
     val ui = mutable.asStateFlow()

@@ -11,7 +11,8 @@ import kotlinx.coroutines.flow.*
 
 private val Context.appearancePreferences by preferencesDataStore("appearance_preferences")
 enum class ThemeMode { System, Light, Dark }
-data class AppearanceSettings(val mode: ThemeMode = ThemeMode.System, val wallpaper: Boolean = false)
+/** [ambient] and [videoColours] shape the player; both default on. */
+data class AppearanceSettings(val mode: ThemeMode = ThemeMode.System, val wallpaper: Boolean = false, val ambient: Boolean = true, val videoColours: Boolean = true)
 internal fun themeMode(value: String?): ThemeMode = ThemeMode.entries.firstOrNull { it.name == value } ?: ThemeMode.System
 internal fun useDarkTheme(mode: ThemeMode, systemDark: Boolean): Boolean = when (mode) {
     ThemeMode.System -> systemDark
@@ -23,7 +24,10 @@ internal fun useDynamicColor(enabled: Boolean, sdk: Int): Boolean = enabled && s
 @Singleton
 class AppearancePreferences @Inject constructor(@ApplicationContext private val context: Context) {
     val settings = context.appearancePreferences.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-        .map { AppearanceSettings(themeMode(it[stringPreferencesKey("mode")]), it[booleanPreferencesKey("wallpaper")] ?: false) }
+        .map { AppearanceSettings(themeMode(it[stringPreferencesKey("mode")]), it[booleanPreferencesKey("wallpaper")] ?: false,
+            it[booleanPreferencesKey("ambient")] ?: true, it[booleanPreferencesKey("video_colours")] ?: true) }
     suspend fun mode(mode: ThemeMode) { context.appearancePreferences.edit { it[stringPreferencesKey("mode")] = mode.name } }
     suspend fun wallpaper(enabled: Boolean) { context.appearancePreferences.edit { it[booleanPreferencesKey("wallpaper")] = enabled } }
+    suspend fun ambient(enabled: Boolean) { context.appearancePreferences.edit { it[booleanPreferencesKey("ambient")] = enabled } }
+    suspend fun videoColours(enabled: Boolean) { context.appearancePreferences.edit { it[booleanPreferencesKey("video_colours")] = enabled } }
 }

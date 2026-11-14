@@ -9,7 +9,6 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -21,6 +20,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -42,7 +43,14 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
@@ -74,8 +82,8 @@ class MainActivity : ComponentActivity() {
     private var linkError by mutableStateOf<String?>(null)
     private var pendingVideo by mutableStateOf<String?>(null)
     private var pipEligible = false
-    private var playerBounds: Rect? = null
-    private var appliedPip: Pair<Boolean, Rect?>? = null
+    private var playerBounds: android.graphics.Rect? = null
+    private var appliedPip: Pair<Boolean, android.graphics.Rect?>? = null
     private var fullscreen = false
     private var refreshResumed = false
     private val smoothRefresh by lazy { SmoothRefreshRate(window) }
@@ -127,7 +135,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Navigation, the shared snackbar and the mini player around the screens. */
+    /** Navigation, the shared snackbar and the player layer above the screens. */
+    @OptIn(ExperimentalSharedTransitionApi::class)
     @Composable
     private fun App(settings: AppearanceSettings) {
         val nav = rememberNavController()
@@ -139,12 +148,14 @@ class MainActivity : ComponentActivity() {
         var searchExpanded by remember { mutableStateOf(false) }
         var playerSheetVisible by remember { mutableStateOf(false) }
         val snackbar = remember { SnackbarHostState() }
+        val sheet = rememberSaveable(saver = PlayerSheetState.Saver) { PlayerSheetState(true) }
+        val scope = rememberCoroutineScope()
+        val animate = rememberAnimationsEnabled()
         Snackbars(snackbar)
         EngagementHaptics()
         CastFollowsPlayer(controller, playing.isPlaying)
         val entry by nav.currentBackStackEntryAsState()
         val currentRoute = entry?.destination?.route
-        val playerVisible = currentRoute == "player"
         var selectedTopRoute by rememberSaveable { mutableStateOf(TopDestination.Home.route) }
         val selectedTop = TopDestination.entries.firstOrNull { it.route == selectedTopRoute } ?: TopDestination.Home
         var reselections by rememberSaveable { mutableStateOf(emptyMap<String, Int>()) }
@@ -164,50 +175,81 @@ class MainActivity : ComponentActivity() {
                 launchSingleTop = true
             }
         }
-        LaunchedEffect(currentRoute) { videos.prefetch(emptyList()); thumbnails.submit(emptyList()) }
         val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-        SideEffect { updateFullscreen(playerVisible && landscape && !inPip) }
-        DisposableEffect(playerVisible) {
-            onDispose {
-                // Leave rotation under the user's system setting outside the player.
-                if (playerVisible) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            }
-        }
         val goSettings: () -> Unit = { nav.open("settings") }
-        val goPlayer: () -> Unit = { nav.open("player") }
-        val play: (String) -> Unit = { url -> playback.play(url); goPlayer() }
-        LaunchedEffect(openPlayer, pendingVideo) {
-            pendingVideo?.let { playback.play(it); pendingVideo = null }
-            if (openPlayer) { goPlayer(); openPlayer = false }
-        }
-        SideEffect { updatePip(playerVisible && playing.playWhenReady && !playing.resolving && playing.error == null) }
-        AppNavigation(selectedTop, playerVisible || (currentRoute == "search" && searchExpanded), wideNavigation, selectTop) {
-            Scaffold(contentWindowInsets = WindowInsets(0), snackbarHost = {
-                if (!inPip && !playerSheetVisible) SnackbarHost(snackbar, Modifier.navigationBarsPadding())
-            }) { outerInsets ->
-                Column(Modifier.fillMaxSize().padding(outerInsets)) {
-                    val preview = rememberBackPreview(nav)
-                    NavHost(nav, startDestination = "home", modifier = Modifier.weight(1f),
-                        enterTransition = ScreenMotion.enter, exitTransition = ScreenMotion.exit,
-                        popEnterTransition = ScreenMotion.popEnter, popExitTransition = ScreenMotion.popExit,
-                        predictivePopEnterTransition = ScreenMotion.predictivePopEnter, predictivePopExitTransition = ScreenMotion.predictivePopExit) {
-                        AccountFeed.entries.forEach { destination ->
-                            composable(feedRoute(destination)) { entry -> ScreenCard(entry, preview) {
-                                FeedDestination(destination, nav, currentRoute, feedPages, reselections, play)
-                            } }
+        SharedTransitionLayout {
+            val share = remember(this) { PlayerShare(this) }
+            val searchOpen = currentRoute == "search" && searchExpanded
+            // While search fills the window the docked player steps aside; playback continues.
+            val layerShown = (playing.video != null || share.opening != null) && !(searchOpen && !sheet.expanded)
+            val playerOpen = layerShown && sheet.expanded
+            val playerCovers by rememberUpdatedState(playerOpen)
+            LaunchedEffect(currentRoute, playerOpen) { videos.prefetch(emptyList()); thumbnails.submit(emptyList()) }
+            SideEffect { updateFullscreen(playerOpen && landscape && !inPip) }
+            DisposableEffect(playerOpen) {
+                onDispose {
+                    // Leave rotation under the user's system setting outside the full player.
+                    if (playerOpen) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                }
+            }
+            val play: (String) -> Unit = { url ->
+                val flying = share.begin(url, animate && !sameVideo(url, playing.video?.url), fade = !(layerShown && sheet.expanded && sheet.fraction == 1f))
+                if (flying || !layerShown) sheet.show(true) else sheet.settle(scope, true)
+                playback.play(url)
+            }
+            LaunchedEffect(openPlayer, pendingVideo) {
+                pendingVideo?.let { playback.play(it); sheet.show(true); pendingVideo = null }
+                if (openPlayer) { sheet.settle(scope, true); openPlayer = false }
+            }
+            SideEffect { updatePip(playerOpen && playing.playWhenReady && !playing.resolving && playing.error == null) }
+            val density = LocalDensity.current
+            var dock by remember { mutableStateOf<Rect?>(null) }
+            var contentBottom by remember { mutableFloatStateOf(0f) }
+            var rootHeight by remember { mutableIntStateOf(0) }
+            val covered by remember { derivedStateOf { sheet.fraction == 1f } }
+            // Fully under the player, the app is neither drawn nor read out; a fading-in player still shows it.
+            val hidden = playerOpen && covered && share.opening?.fade != true
+            CompositionLocalProvider(LocalPlayerShare provides share) {
+                Box(Modifier.fillMaxSize().onSizeChanged { rootHeight = it.height }) {
+                    AppNavigation(selectedTop, searchOpen, wideNavigation, selectTop, modifier = Modifier
+                        .then(if (hidden) Modifier.clearAndSetSemantics {} else Modifier)
+                        .drawWithContent { if (!(layerShown && sheet.fraction == 1f && share.opening?.fade != true)) drawContent() }) {
+                        Scaffold(contentWindowInsets = WindowInsets(0)) { outerInsets ->
+                            Column(Modifier.fillMaxSize().padding(outerInsets).onGloballyPositioned { contentBottom = it.boundsInRoot().bottom }) {
+                                val preview = rememberBackPreview(nav) { playerCovers }
+                                NavHost(nav, startDestination = "home", modifier = Modifier.weight(1f),
+                                    enterTransition = ScreenMotion.enter, exitTransition = ScreenMotion.exit,
+                                    popEnterTransition = ScreenMotion.popEnter, popExitTransition = ScreenMotion.popExit,
+                                    predictivePopEnterTransition = ScreenMotion.predictivePopEnter, predictivePopExitTransition = ScreenMotion.predictivePopExit) {
+                                    AccountFeed.entries.forEach { destination ->
+                                        composable(feedRoute(destination)) { entry -> ScreenCard(entry, preview) {
+                                            FeedDestination(destination, nav, currentRoute, feedPages, reselections, play, playerOpen) { playerCovers }
+                                        } }
+                                    }
+                                    composable("library") { entry -> ScreenCard(entry, preview) {
+                                        feedPages.SaveableStateProvider("library") { LibraryDestination(nav, reselections["library"] ?: 0) }
+                                    } }
+                                    composable("account") { entry -> ScreenCard(entry, preview) { AccountDestination(nav, goSettings) } }
+                                    composable("settings") { entry -> ScreenCard(entry, preview) { SettingsDestination(nav, settings) } }
+                                    composable("search") { entry -> ScreenCard(entry, preview) { SearchDestination(nav, play, { playerCovers }) { searchExpanded = it } } }
+                                }
+                                // The mini player docks here, above the navigation bar.
+                                if (layerShown && !searchOpen) {
+                                    Spacer(Modifier.fillMaxWidth().height(MiniPlayerHeight).onGloballyPositioned { dock = it.boundsInRoot() })
+                                    if (wideNavigation) Spacer(Modifier.navigationBarsPadding())
+                                }
+                            }
                         }
-                        composable("library") { entry -> ScreenCard(entry, preview) {
-                            feedPages.SaveableStateProvider("library") { LibraryDestination(nav, reselections["library"] ?: 0) }
-                        } }
-                        composable("account") { entry -> ScreenCard(entry, preview) { AccountDestination(nav, goSettings) } }
-                        composable("settings") { entry -> ScreenCard(entry, preview) { SettingsDestination(nav, settings) } }
-                        composable("search") { entry -> ScreenCard(entry, preview) { SearchDestination(nav, play) { searchExpanded = it } } }
-                        composable("player") { entry -> ScreenCard(entry, preview) {
-                            PlayerDestination(nav, currentRoute, snackbar, landscape, goSettings) { playerSheetVisible = it }
-                        } }
                     }
-                    if (!playerVisible && !searchExpanded && playing.video != null && !inPip)
-                        MiniPlayer(playing, controller, expand = goPlayer, toggle = playback::toggle, close = playback::close, navigationPadding = wideNavigation)
+                    if (layerShown) PlayerDestination(sheet, dock, snackbar, landscape, settings, play,
+                        goSettings = { sheet.settle(scope, false); goSettings() }) { playerSheetVisible = it }
+                    val navigationBars = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                    val snackbarBottom = with(density) { when {
+                        playerOpen -> navigationBars
+                        layerShown && dock != null -> (rootHeight - dock!!.top).coerceAtLeast(0f).toDp()
+                        else -> maxOf((rootHeight - contentBottom).coerceAtLeast(0f).toDp(), navigationBars)
+                    } }
+                    if (!inPip && !playerSheetVisible) SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = snackbarBottom))
                 }
             }
         }
@@ -252,7 +294,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun FeedDestination(destination: AccountFeed, nav: NavController, currentRoute: String?, pages: SaveableStateHolder,
-        reselections: Map<String, Int>, play: (String) -> Unit) {
+        reselections: Map<String, Int>, play: (String) -> Unit, playerOpen: Boolean, playerCovers: () -> Boolean) {
         val route = feedRoute(destination)
         val session by account.session.collectAsStateWithLifecycle()
         val profile by account.profile.collectAsStateWithLifecycle()
@@ -260,8 +302,8 @@ class MainActivity : ComponentActivity() {
         val snapshots by feeds.cached.collectAsStateWithLifecycle()
         val shown = if (feed.feed == destination) feed else snapshots[destination] ?: FeedState(feed = destination, initialized = false)
         val pageKey = feedPageKey(route, shown.playlist?.id)
-        // A feed that is animating away must not act on the one now on top.
-        val onTop = { nav.currentDestination?.route == route }
+        // A feed that is animating away, or under the full player, must not act on what's on top.
+        val onTop = { nav.currentDestination?.route == route && !playerCovers() }
         pages.SaveableStateProvider(pageKey) {
             FeedScreen(shown, session,
                 search = { nav.open("search") }, account = { nav.open("account") },
@@ -271,7 +313,7 @@ class MainActivity : ComponentActivity() {
                 back = { if (shown.playlist != null) feeds.back() else nav.popBackStack() },
                 prefetch = { if (onTop()) videos.prefetch(it) },
                 pullRefresh = { if (onTop()) feeds.pullRefresh() }, retry = { if (onTop()) feeds.retry() }, profile = profile,
-                reselect = reselections[pageKey] ?: 0, active = currentRoute == route && feed.feed == destination,
+                reselect = reselections[pageKey] ?: 0, active = currentRoute == route && feed.feed == destination && !playerOpen,
                 thumbnailPrefetch = { if (onTop()) thumbnails.submit(it) })
         }
     }
@@ -305,28 +347,29 @@ class MainActivity : ComponentActivity() {
         SettingsScreen(settings, engagementState.settings, session.signedIn,
             version = remember { packageManager.getPackageInfo(packageName, 0).versionName.orEmpty() },
             back = { nav.popBackStack() }, themeMode = account::themeMode, wallpaper = account::wallpaper,
-            history = engagement::history, estimates = engagement::estimates)
+            history = engagement::history, estimates = engagement::estimates, ambient = account::ambient, videoColours = account::videoColours)
     }
 
     @Composable
-    private fun SearchDestination(nav: NavController, play: (String) -> Unit, expandedChange: (Boolean) -> Unit) {
+    private fun SearchDestination(nav: NavController, play: (String) -> Unit, playerCovers: () -> Boolean, expandedChange: (Boolean) -> Unit) {
         val state by search.state.collectAsStateWithLifecycle()
         val recent by search.recent.collectAsStateWithLifecycle()
-        val onTop = { nav.currentDestination?.route == "search" }
+        val onTop = { nav.currentDestination?.route == "search" && !playerCovers() }
         SearchScreen(state, recent, search::edit, search::search, search::more, search::clearHistory, play,
             back = { nav.popBackStack() }, expandedChange = expandedChange, prefetch = { if (onTop()) videos.prefetch(it) },
             thumbnailPrefetch = { if (onTop()) thumbnails.submit(it) })
     }
 
     @Composable
-    private fun PlayerDestination(nav: NavController, currentRoute: String?, snackbar: SnackbarHostState, landscape: Boolean,
-        goSettings: () -> Unit, sheetVisible: (Boolean) -> Unit) {
+    private fun PlayerDestination(sheet: PlayerSheetState, dock: Rect?, snackbar: SnackbarHostState, landscape: Boolean, appearance: AppearanceSettings,
+        play: (String) -> Unit, goSettings: () -> Unit, sheetVisible: (Boolean) -> Unit) {
         val playing by playback.state.collectAsStateWithLifecycle()
         val controller by playback.controller.collectAsStateWithLifecycle()
         val connectionError by playback.connectionError.collectAsStateWithLifecycle()
         val commentState by comments.state.collectAsStateWithLifecycle()
         val engagementState by engagement.state.collectAsStateWithLifecycle()
         val castState by casting.state.collectAsStateWithLifecycle()
+        val scope = rememberCoroutineScope()
         val shownPlayer = remember(controller) { controller?.let { CastPlayer(it, casting::tvPositionMs, casting::seek) } }
         val castActions = remember(casting) {
             CastActions(open = casting::open, denied = casting::denied, scan = casting::scan, dismiss = casting::dismiss,
@@ -341,19 +384,18 @@ class MainActivity : ComponentActivity() {
         }
         val commentActions = remember(comments) { CommentActions(comments::more, comments::refresh, comments::pullRefresh) }
         val engagementActions = remember(engagement) { EngagementActions(engagement::rate, engagement::subscribe, refresh = { engagement.refresh() }) }
-        val window = remember(nav, landscape, sheetVisible) {
-            PlayerWindow(back = { nav.popBackStack() }, pip = ::enterPip,
+        val window = remember(sheet, landscape, sheetVisible) {
+            PlayerWindow(collapse = { sheet.settle(scope, false) }, pip = ::enterPip,
                 toggleFullscreen = {
                     requestedOrientation = if (landscape) ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
                     else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 },
-                bounds = { if (it != playerBounds) { playerBounds = Rect(it); updatePip(pipEligible) } }, sheetVisible = sheetVisible)
+                bounds = { if (it != playerBounds) { playerBounds = android.graphics.Rect(it); updatePip(pipEligible) } }, sheetVisible = sheetVisible)
         }
-        val onTop = { nav.currentDestination?.route == "player" }
-        PlayerScreen(playing, shownPlayer, connectionError, inPip, commentState, commentActions, engagementState, engagementActions,
-            window, settings = goSettings, quality = playback::quality, play = playback::play, prefetch = { if (onTop()) videos.prefetch(it) },
-            cast = castState, castActions = castActions, snackbar = snackbar, active = currentRoute == "player",
-            thumbnailPrefetch = { if (onTop()) thumbnails.submit(it) })
+        PlayerLayer(sheet, dock, playing, shownPlayer, connectionError, inPip, commentState, commentActions, engagementState, engagementActions,
+            window, appearance, settings = goSettings, quality = playback::quality, play = play, toggle = playback::toggle, close = playback::close,
+            prefetch = { if (sheet.expanded) videos.prefetch(it) }, cast = castState, castActions = castActions, snackbar = snackbar,
+            thumbnailPrefetch = { if (sheet.expanded) thumbnails.submit(it) })
     }
 
     private fun NavController.open(route: String) = navigate(route) { launchSingleTop = true }

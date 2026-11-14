@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -85,7 +86,7 @@ internal object ScreenMotion {
  * emphasized animation while drifting on, and the previous screen grows to full size as the scrim clears.
  */
 @Stable
-internal class BackPreview(private val nav: NavController) {
+internal class BackPreview(private val nav: NavController, private val ignored: () -> Boolean) {
     var closingId by mutableStateOf<String?>(null); private set
     var hiddenEntries by mutableStateOf(emptySet<String>()); private set
     var enteringId by mutableStateOf<String?>(null); private set
@@ -109,6 +110,8 @@ internal class BackPreview(private val nav: NavController) {
                         settling?.cancel(); reset()
                     }
                     if (closingId == null) {
+                        // The full player handles back itself by collapsing; the screen beneath stays put.
+                        if (ignored()) return@collect
                         // From the start destination the system's back-to-home animation runs instead.
                         val closing = nav.currentBackStackEntry ?: return@collect
                         val entering = nav.previousBackStackEntry ?: return@collect
@@ -153,8 +156,9 @@ internal class BackPreview(private val nav: NavController) {
 }
 
 @Composable
-internal fun rememberBackPreview(nav: NavController): BackPreview {
-    val preview = remember(nav) { BackPreview(nav) }
+internal fun rememberBackPreview(nav: NavController, ignored: () -> Boolean = { false }): BackPreview {
+    val current by rememberUpdatedState(ignored)
+    val preview = remember(nav) { BackPreview(nav) { current() } }
     val dispatcher = LocalNavigationEventDispatcherOwner.current?.navigationEventDispatcher
     LaunchedEffect(preview, dispatcher) { dispatcher?.let { preview.follow(it, this) } }
     return preview

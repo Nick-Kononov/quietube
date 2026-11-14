@@ -19,7 +19,8 @@ import dev.quietube.account.actions.SyncSettings
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SettingsScreen(appearance: AppearanceSettings, sync: SyncSettings, signedIn: Boolean, version: String,
-    back: () -> Unit, themeMode: (ThemeMode) -> Unit, wallpaper: (Boolean) -> Unit, history: (Boolean) -> Unit, estimates: (Boolean) -> Unit) {
+    back: () -> Unit, themeMode: (ThemeMode) -> Unit, wallpaper: (Boolean) -> Unit, history: (Boolean) -> Unit, estimates: (Boolean) -> Unit,
+    ambient: (Boolean) -> Unit = {}, videoColours: (Boolean) -> Unit = {}) {
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(Modifier.nestedScroll(scroll.nestedScrollConnection), topBar = { LargeTopAppBar(title = { Text("Settings") }, scrollBehavior = scroll, navigationIcon = {
         IconButton(onClick = back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
@@ -31,6 +32,9 @@ internal fun SettingsScreen(appearance: AppearanceSettings, sync: SyncSettings, 
                     modifier = Modifier.selectable(appearance.mode == mode, role = Role.RadioButton, onClick = { themeMode(mode) }))
             }
             if (Build.VERSION.SDK_INT >= 31) SettingsSwitch("Use wallpaper colours", "Use colours from your wallpaper instead of the YouPoop palette.", appearance.wallpaper, wallpaper)
+            SettingsHeading("Player")
+            if (Build.VERSION.SDK_INT >= 31) SettingsSwitch("Ambient mode", "A soft glow of the video's colours behind the player in dark theme. Off in landscape, picture-in-picture and Battery Saver.", appearance.ambient, ambient)
+            SettingsSwitch("Colour player from video", "Tint the player's buttons and tabs with colours from the video's thumbnail.", appearance.videoColours, videoColours)
             SettingsHeading("Playback")
             ListItem(content = { Text("Default video quality") }, supportingContent = { Text("Auto · 1080p on Wi-Fi, 720p on mobile data. Metered Wi-Fi uses the mobile cap. Override quality from the video's details.") })
             ListItem(content = { Text("Background audio") }, supportingContent = { Text("Audio keeps playing with the screen off and when you leave the app. Use the notification or lock-screen controls to pause.") })
