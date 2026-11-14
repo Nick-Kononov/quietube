@@ -937,7 +937,27 @@ function per renderer kind; feed selection storage lives in `FeedPreferences`;
 JSON helpers, YouTube ID patterns and watch segments each have one definition.
 
 `assembleDebug`, the offline unit tests (including new ones for paging,
-engagement settings and the JSON walk) and lint pass with no new findings. None
-of this was checked on a device: the cast and paging fixes in particular were
-verified by reading and unit tests only, and want a manual pass with a TV and a
-failing network before release.
+engagement settings and the JSON walk) and lint pass with no new findings.
+
+The R8 release build of this branch was then installed over the signed-in app
+on the Pixel 8 and checked by hand:
+
+- Launch: cold start in about 0.35 s, signed-in Home loaded.
+- Paging: with Wi-Fi and mobile data off, the end of Home showed "Feed
+  unavailable / Try again" and stayed there for 12 s with no spinner; back
+  online, "Try again" loaded the next page.
+- Watch history: 45 s of playback produced no sync message, and History listed
+  the video first with progress matching the paused position. Likes and the
+  dislike estimate both appeared on the player.
+- Direct cast to a Hisense VIDAA TV: dismissing the sheet mid-send, by tapping
+  outside it or dragging it down, stopped the stream service within two
+  seconds and the TV never fetched the stream. A completed cast followed a
+  15 s seek on the phone, and Stop ended the service.
+
+One thing the fix does not cover: Back (key or gesture) while a send is in
+progress does not reach the sheet's dismiss callback, so the cast completes
+and shows the usual "Playing on ... Stop" row. Released 0.5.8 behaves the
+same, so this is existing Material sheet behaviour rather than a regression,
+and nothing is orphaned. Not checked on the device: the sign-in and sign-out
+flows, the YouTube-app (Lounge) cast, and casting a second video over a
+running one.
