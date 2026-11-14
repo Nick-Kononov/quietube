@@ -28,7 +28,7 @@ import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import org.schabi.newpipe.extractor.stream.StreamType
 
-private class CommentCursor(val url: String,val page: Page) : Continuation
+private class CommentCursor(val url: String, val page: Page) : Continuation
 private class PlaylistCursor(val id: String, val page: Page) : Continuation
 
 private data class SearchContinuation(val query: String, val page: Page) : Continuation
@@ -46,23 +46,23 @@ class NewPipeAnonymousSource @Inject constructor(private val downloader: Extract
         ServiceList.YouTube
     }
 
-    override suspend fun comments(url: String,continuation: Continuation?): Outcome<CommentPage> = withContext(Dispatchers.IO) {
+    override suspend fun comments(url: String, continuation: Continuation?): Outcome<CommentPage> = withContext(Dispatchers.IO) {
         try {
             val cursor = continuation as? CommentCursor
             if (continuation != null && (cursor == null || cursor.url != url))
                 return@withContext Outcome.Failure(VideoError.ExtractionBroken)
-            val info = if (cursor == null) CommentsInfo.getInfo(service,url) else null
+            val info = if (cursor == null) CommentsInfo.getInfo(service, url) else null
             if (cursor == null && info == null) return@withContext Outcome.Failure(VideoError.ContentUnavailable)
-            if (info?.isCommentsDisabled == true) return@withContext Outcome.Success(CommentPage(emptyList(),disabled = true))
-            val page = if (cursor == null) InfoItemsPage(info!!.relatedItems,info.nextPage,info.errors)
-                else CommentsInfo.getMoreItems(service,url,cursor.page)
+            if (info?.isCommentsDisabled == true) return@withContext Outcome.Success(CommentPage(emptyList(), disabled = true))
+            val page = if (cursor == null) InfoItemsPage(info!!.relatedItems, info.nextPage, info.errors)
+                else CommentsInfo.getMoreItems(service, url, cursor.page)
             var skipped = page.errors.isNotEmpty()
             val comments = page.items.mapNotNull { item ->
                 try { CommentMapper.map(item) } catch (_: Exception) { skipped = true; null }
             }.distinctBy { it.id }
             if (comments.isEmpty() && skipped) return@withContext Outcome.Failure(VideoError.ExtractionBroken)
-            Outcome.Success(CommentPage(comments,page.nextPage?.takeIf { Page.isValid(it) }?.let { CommentCursor(url,it) },
-                total = info?.commentsCount?.takeIf { it >= 0 },skippedItems = skipped))
+            Outcome.Success(CommentPage(comments, page.nextPage?.takeIf { Page.isValid(it) }?.let { CommentCursor(url, it) },
+                total = info?.commentsCount?.takeIf { it >= 0 }, skippedItems = skipped))
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) { Outcome.Failure(mapExtractorError(e)) }
     }

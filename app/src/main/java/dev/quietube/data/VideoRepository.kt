@@ -44,7 +44,7 @@ sealed interface Outcome<out T> {
 data class PlaylistSummary(val id: String, val title: String, val thumbnailUrl: String?, val countText: String?)
 
 interface VideoRepository : AccountActions {
-    suspend fun comments(url: String,continuation: Continuation? = null): Outcome<CommentPage> = Outcome.Failure(VideoError.ContentUnavailable)
+    suspend fun comments(url: String, continuation: Continuation? = null): Outcome<CommentPage> = Outcome.Failure(VideoError.ContentUnavailable)
     suspend fun feed(feed: AccountFeed, continuation: Continuation? = null): Outcome<VideoPage>
     suspend fun playlist(id: String, continuation: Continuation? = null): Outcome<VideoPage>
     fun resumePosition(url: String): Long? = null
@@ -59,7 +59,7 @@ interface VideoRepository : AccountActions {
 }
 
 interface AnonymousSource {
-    suspend fun comments(url: String,continuation: Continuation? = null): Outcome<CommentPage> = Outcome.Failure(VideoError.ContentUnavailable)
+    suspend fun comments(url: String, continuation: Continuation? = null): Outcome<CommentPage> = Outcome.Failure(VideoError.ContentUnavailable)
     suspend fun playlist(id: String, continuation: Continuation? = null): Outcome<VideoPage>
     suspend fun playback(url: String): Outcome<PlaybackDetails>
     suspend fun search(query: String, continuation: Continuation? = null): Outcome<VideoPage>

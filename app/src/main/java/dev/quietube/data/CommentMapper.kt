@@ -11,7 +11,7 @@ internal object CommentMapper {
         val author = item.uploaderName.orEmpty().ifBlank { "YouTube viewer" }
         val id = item.commentId?.takeIf { it.isNotBlank() } ?: MessageDigest.getInstance("SHA-256")
             .digest("$author\u0000$text".toByteArray()).joinToString("") { "%02x".format(it) }
-        return Comment(id,author,item.uploaderAvatars.maxByOrNull { it.height }?.url,text,
-            item.textualUploadDate,item.likeCount.takeIf { it >= 0 },item.isPinned,item.isHeartedByUploader)
+        return Comment(id, author, item.uploaderAvatars.maxByOrNull { it.height }?.url, text,
+            item.textualUploadDate, item.likeCount.takeIf { it >= 0 }, item.isPinned, item.isHeartedByUploader)
     }
 }

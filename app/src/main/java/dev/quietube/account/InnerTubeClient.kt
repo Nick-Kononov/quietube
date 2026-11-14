@@ -37,24 +37,24 @@ class InnerTubeClient @Inject constructor(@AccountHttp private val http: OkHttpC
     }
     suspend fun browse(browseId: String?, continuation: String?): JsonObject {
         sessions.initialize()
-        if (sessions.status.value.method == SessionMethod.DeviceCode) return tv.browse(browseId,continuation)
-        return request("browse",buildJsonObject {
-            if (continuation != null) put("continuation",continuation) else put("browseId",browseId ?: error("Missing browse ID"))
+        if (sessions.status.value.method == SessionMethod.DeviceCode) return tv.browse(browseId, continuation)
+        return request("browse", buildJsonObject {
+            if (continuation != null) put("continuation", continuation) else put("browseId", browseId ?: error("Missing browse ID"))
         })
     }
-    suspend fun request(endpoint: String,payload: JsonObject): JsonObject {
+    suspend fun request(endpoint: String, payload: JsonObject): JsonObject {
         sessions.initialize()
-        if (sessions.status.value.method == SessionMethod.DeviceCode) return tv.request(endpoint,payload)
-        return requestCookies(endpoint,payload)
+        if (sessions.status.value.method == SessionMethod.DeviceCode) return tv.request(endpoint, payload)
+        return requestCookies(endpoint, payload)
     }
-    private suspend fun requestCookies(endpoint: String,payload: JsonObject): JsonObject = withContext(Dispatchers.IO) { mutex.withLock {
+    private suspend fun requestCookies(endpoint: String, payload: JsonObject): JsonObject = withContext(Dispatchers.IO) { mutex.withLock {
         require(endpoint in ENDPOINTS)
         val snapshot = sessions.snapshot() ?: throw AccountFailure(VideoError.AuthExpired)
         var cookies = snapshot.cookies
         val currentRevision = snapshot.revision
         // clear() may null the shared field at any time; work from a local copy.
         val config = cached?.takeIf { revision == currentRevision && System.currentTimeMillis() - configuredAt <= 6 * 60 * 60 * 1000L }
-            ?: loadConfiguration(cookies,currentRevision).let { page ->
+            ?: loadConfiguration(cookies, currentRevision).let { page ->
                 cookies = page.cookies
                 cached = page.configuration; configuredAt = System.currentTimeMillis(); revision = currentRevision
                 page.configuration
@@ -69,12 +69,12 @@ class InnerTubeClient @Inject constructor(@AccountHttp private val http: OkHttpC
         })
         val body = buildJsonObject {
             put("context", JsonObject(config.context.toMutableMap().apply { put("client", client) }))
-            payload.forEach { (key,value) -> put(key,value) }
+            payload.forEach { (key, value) -> put(key, value) }
         }
         val request = authenticated(Request.Builder().url("$ORIGIN/youtubei/v1/$endpoint?prettyPrint=false"), cookies, config)
             .post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType())).build()
         lastRequest = SystemClock.elapsedRealtime()
-        val result = execute(request,cookies,currentRevision).body
+        val result = execute(request, cookies, currentRevision).body
         currentCoroutineContext().ensureActive()
         if (sessions.status.value.revision != currentRevision) throw AccountFailure(VideoError.AuthExpired)
         val json = accountJson.parseToJsonElement(result).jsonObject
@@ -87,7 +87,7 @@ class InnerTubeClient @Inject constructor(@AccountHttp private val http: OkHttpC
     private suspend fun loadConfiguration(cookies: SessionCookies, expectedRevision: Long? = null): ConfigurationPage {
         val request = Request.Builder().url("$ORIGIN/").header("User-Agent", USER_AGENT)
             .header("Cookie", cookies.header()).header("Accept-Language", "en-US,en;q=0.9").build()
-        val page = execute(request,cookies,expectedRevision)
+        val page = execute(request, cookies, expectedRevision)
         return ConfigurationPage(WebConfigurationParser.parse(page.body), page.cookies)
     }
     private fun authenticated(builder: Request.Builder, cookies: SessionCookies, config: WebConfiguration): Request.Builder {
@@ -103,9 +103,9 @@ class InnerTubeClient @Inject constructor(@AccountHttp private val http: OkHttpC
     private suspend fun execute(request: Request, cookies: SessionCookies, expectedRevision: Long? = null): Fetched = http.newCall(request).await().use { response ->
         currentCoroutineContext().ensureActive()
         val updated = if (expectedRevision == null) cookies.updated(response.headers.values("Set-Cookie"))
-            else sessions.applyResponseCookies(expectedRevision,response.headers.values("Set-Cookie")) ?: throw AccountFailure(VideoError.AuthExpired)
+            else sessions.applyResponseCookies(expectedRevision, response.headers.values("Set-Cookie")) ?: throw AccountFailure(VideoError.AuthExpired)
         when {
-            response.code in setOf(301,302,303,307,308,401,403) -> throw AccountFailure(VideoError.AuthExpired)
+            response.code in setOf(301, 302, 303, 307, 308, 401, 403) -> throw AccountFailure(VideoError.AuthExpired)
             response.code == 429 -> throw AccountFailure(VideoError.RateLimited)
             response.code == 404 -> throw AccountFailure(VideoError.ContentUnavailable)
             !response.isSuccessful -> throw AccountFailure(VideoError.Network)
@@ -116,7 +116,7 @@ class InnerTubeClient @Inject constructor(@AccountHttp private val http: OkHttpC
     companion object {
         const val ORIGIN = YouTubeAuthorization.ORIGIN
         /** The only InnerTube endpoints either account client may call. */
-        internal val ENDPOINTS = setOf("browse","next","player","like/like","like/dislike","like/removelike","like/removedislike","subscription/subscribe","subscription/unsubscribe","account/accounts_list")
+        internal val ENDPOINTS = setOf("browse", "next", "player", "like/like", "like/dislike", "like/removelike", "like/removedislike", "subscription/subscribe", "subscription/unsubscribe", "account/accounts_list")
         const val USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
         fun errorFor(e: Exception): VideoError = when(e) {
             is AccountFailure -> e.error

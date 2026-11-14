@@ -9,6 +9,6 @@ import androidx.compose.ui.semantics.*
 @Composable
 internal fun PlayerLoadingIndicator() {
     val modifier = Modifier.clearAndSetSemantics { contentDescription = "Loading video"; progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate }
-    if (rememberAnimationsEnabled()) CircularProgressIndicator(modifier,color = OverlayWhite,trackColor = Color.Transparent)
-    else CircularProgressIndicator(progress = { .25f },modifier = modifier,color = OverlayWhite,trackColor = Color.Transparent)
+    if (rememberAnimationsEnabled()) CircularProgressIndicator(modifier, color = OverlayWhite, trackColor = Color.Transparent)
+    else CircularProgressIndicator(progress = { .25f }, modifier = modifier, color = OverlayWhite, trackColor = Color.Transparent)
 }

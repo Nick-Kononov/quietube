@@ -7,13 +7,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.*
 
 @Composable
-internal fun AppLoadingIndicator(modifier: Modifier = Modifier,contained: Boolean = false) {
+internal fun AppLoadingIndicator(modifier: Modifier = Modifier, contained: Boolean = false) {
     val animate = rememberAnimationsEnabled()
     val semantics = modifier.clearAndSetSemantics { contentDescription = "Loading"; progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate }
     if (animate) {
         if (contained) ContainedLoadingIndicator(semantics) else LoadingIndicator(semantics)
     } else {
-        if (contained) ContainedLoadingIndicator(progress = { .5f },modifier = semantics)
-        else LoadingIndicator(progress = { .5f },modifier = semantics)
+        if (contained) ContainedLoadingIndicator(progress = { .5f }, modifier = semantics)
+        else LoadingIndicator(progress = { .5f }, modifier = semantics)
     }
 }

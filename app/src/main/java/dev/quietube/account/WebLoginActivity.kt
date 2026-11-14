@@ -39,9 +39,9 @@ class WebLoginActivity : ComponentActivity() {
         enableEdgeToEdge()
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         WebView.setWebContentsDebuggingEnabled(false)
-        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 50, 0, 40); setBackgroundColor(Color.rgb(16,18,21)) }
+        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 50, 0, 40); setBackgroundColor(Color.rgb(16, 18, 21)) }
         val close = Button(this).apply { text = "Close / use cookies.txt import"; setOnClickListener { finish() } }
-        status = TextView(this).apply { setTextColor(Color.WHITE); setPadding(24,12,24,12); text = "Sign in to Google. If this browser is blocked, close it and import cookies.txt from your desktop browser." }
+        status = TextView(this).apply { setTextColor(Color.WHITE); setPadding(24, 12, 24, 12); text = "Sign in to Google. If this browser is blocked, close it and import cookies.txt from your desktop browser." }
         ViewCompat.setOnApplyWindowInsetsListener(layout) { view, insets ->
             val padding = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
             view.setPadding(padding.left, padding.top, padding.right, padding.bottom)
@@ -80,7 +80,7 @@ class WebLoginActivity : ComponentActivity() {
                             when (val validation = client.validate(cookies)) {
                                 is Outcome.Success -> {
                                     if (sessions.status.value.revision == expectedRevision) client.clear()
-                                    if (!sessions.saveIfRevision(validation.value,expectedRevision)) {
+                                    if (!sessions.saveIfRevision(validation.value, expectedRevision)) {
                                         capturing = false; status.text = "The session changed. Close this browser and try again."
                                         return@launch
                                     }

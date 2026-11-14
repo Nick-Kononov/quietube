@@ -30,14 +30,14 @@ private const val WATCH_URL = "https://www.youtube.com/watch?v="
 /** Warm two covers ahead and one behind at the same decoded size as a card. */
 @OptIn(FlowPreview::class)
 @Composable
-internal fun PrefetchVisibleThumbnails(state: LazyListState,videos: List<Video>,prefetch: (List<ThumbnailRequest>) -> Unit) {
+internal fun PrefetchVisibleThumbnails(state: LazyListState, videos: List<Video>, prefetch: (List<ThumbnailRequest>) -> Unit) {
     val current by rememberUpdatedState(prefetch)
     val items by rememberUpdatedState(videos)
     val padding = with(LocalDensity.current) { 40.dp.roundToPx() }
-    LaunchedEffect(state,padding) {
+    LaunchedEffect(state, padding) {
         snapshotFlow {
             val layout = state.layoutInfo
-            thumbnailLookAhead(items,layout.visibleItemsInfo.mapNotNull { it.key as? String },layout.viewportSize.width-padding)
+            thumbnailLookAhead(items, layout.visibleItemsInfo.mapNotNull { it.key as? String }, layout.viewportSize.width-padding)
         }.distinctUntilChanged().sample(150).collect { current(it) }
     }
     DisposableEffect(state) { onDispose { current(emptyList()) } }

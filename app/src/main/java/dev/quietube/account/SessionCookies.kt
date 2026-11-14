@@ -12,10 +12,10 @@ class SessionCookies private constructor(private val values: Map<String, String>
     internal fun value(name: String, nowMillis: Long = System.currentTimeMillis()): String? =
         values[name]?.takeIf { (expires[name] ?: Long.MAX_VALUE) > nowMillis }
     internal fun usable(nowMillis: Long = System.currentTimeMillis()): Boolean = value("LOGIN_INFO", nowMillis) != null &&
-        listOf("SAPISID", "__Secure-3PAPISID", "__Secure-1PAPISID").any { value(it,nowMillis) != null }
+        listOf("SAPISID", "__Secure-3PAPISID", "__Secure-1PAPISID").any { value(it, nowMillis) != null }
     internal fun sameContents(other: SessionCookies): Boolean = values == other.values && expires == other.expires
     internal fun encoded(): String = buildJsonObject {
-        put("cookies", JsonArray(values.map { (name,value) -> buildJsonObject {
+        put("cookies", JsonArray(values.map { (name, value) -> buildJsonObject {
             put("name", name); put("value", value); expires[name]?.let { put("expires", it) }
         } }))
     }.toString()
@@ -30,55 +30,55 @@ class SessionCookies private constructor(private val values: Map<String, String>
             if (cookie.expiresAt <= nowMillis) { next.remove(cookie.name); expiry.remove(cookie.name) }
             else { next[cookie.name] = cookie.value; if (cookie.persistent) expiry[cookie.name] = cookie.expiresAt else expiry.remove(cookie.name) }
         }
-        return SessionCookies(next,expiry)
+        return SessionCookies(next, expiry)
     }
     override fun toString(): String = "SessionCookies([redacted])"
     companion object {
         private val namePattern = Regex("[A-Za-z0-9_-]+")
         private fun valid(name: String, value: String): Boolean = namePattern.matches(name) && value.isNotBlank() &&
             value.none { it <= ' ' || it >= '\u007f' || it == ';' }
-        private fun checked(values: Map<String,String>, expiry: Map<String,Long> = emptyMap(), now: Long = System.currentTimeMillis()): SessionCookies {
-            require(values.all { valid(it.key,it.value) }) { "Invalid cookie format." }
-            return SessionCookies(values,expiry).also { require(it.usable(now)) {
+        private fun checked(values: Map<String, String>, expiry: Map<String, Long> = emptyMap(), now: Long = System.currentTimeMillis()): SessionCookies {
+            require(values.all { valid(it.key, it.value) }) { "Invalid cookie format." }
+            return SessionCookies(values, expiry).also { require(it.usable(now)) {
                 "No usable YouTube sign-in session found. Sign in again or import fresh cookies."
             } }
         }
         fun fromHeader(header: String): SessionCookies {
             require(header.length <= 512_000) { "Cookie data is too large." }
-            val result = linkedMapOf<String,String>()
+            val result = linkedMapOf<String, String>()
             header.split(';').forEach { part ->
-                val pair = part.trim().split('=',limit=2)
-                if (pair.size == 2) { require(valid(pair[0],pair[1])) { "Invalid cookie format." }; result[pair[0]] = pair[1] }
+                val pair = part.trim().split('=', limit=2)
+                if (pair.size == 2) { require(valid(pair[0], pair[1])) { "Invalid cookie format." }; result[pair[0]] = pair[1] }
             }
             return checked(result)
         }
         internal fun decoded(text: String): SessionCookies {
             if (!text.startsWith('{')) return fromHeader(text) // Existing encrypted v1 sessions migrate on next write.
             val rows = accountJson.parseToJsonElement(text).jsonObject["cookies"]!!.jsonArray
-            val values = linkedMapOf<String,String>(); val expires = linkedMapOf<String,Long>()
+            val values = linkedMapOf<String, String>(); val expires = linkedMapOf<String, Long>()
             rows.forEach { row ->
                 val obj = row.jsonObject; val name = obj["name"]!!.jsonPrimitive.content
                 values[name] = obj["value"]!!.jsonPrimitive.content
                 obj["expires"]?.jsonPrimitive?.longOrNull?.let { expires[name] = it }
             }
-            return checked(values,expires)
+            return checked(values, expires)
         }
         fun fromNetscape(text: String, nowSeconds: Long = System.currentTimeMillis() / 1000): SessionCookies {
             require(text.length <= 512_000) { "Cookie file is too large." }
-            val values = linkedMapOf<String,String>(); val expires = linkedMapOf<String,Long>()
+            val values = linkedMapOf<String, String>(); val expires = linkedMapOf<String, Long>()
             text.lineSequence().forEach { raw ->
                 val line = raw.removePrefix("\uFEFF").removePrefix("#HttpOnly_").trimEnd('\r')
                 if (line.isBlank() || line.startsWith('#')) return@forEach
-                val cols = line.split('\t',limit=7)
+                val cols = line.split('\t', limit=7)
                 require(cols.size == 7) { "Expected a Netscape cookies.txt file with seven tab-separated columns." }
-                if (cols[0].lowercase().removePrefix(".") !in setOf("youtube.com","www.youtube.com") || cols[2] != "/") return@forEach
+                if (cols[0].lowercase().removePrefix(".") !in setOf("youtube.com", "www.youtube.com") || cols[2] != "/") return@forEach
                 val expiry = cols[4].toLongOrNull() ?: throw IllegalArgumentException("Invalid cookie expiration.")
                 if (expiry != 0L && expiry <= nowSeconds) return@forEach
-                require(expiry in 0..Long.MAX_VALUE/1000 && valid(cols[5],cols[6])) { "Invalid cookie format." }
+                require(expiry in 0..Long.MAX_VALUE/1000 && valid(cols[5], cols[6])) { "Invalid cookie format." }
                 values[cols[5]] = cols[6]
                 if (expiry > 0) expires[cols[5]] = expiry * 1000 else expires.remove(cols[5])
             }
-            return checked(values,expires,nowSeconds*1000)
+            return checked(values, expires, nowSeconds*1000)
         }
     }
 }

@@ -181,14 +181,14 @@ object AccountPageParser {
             if (depth > 30) return
             when (e) {
                 is JsonArray -> e.forEach { walk(it, depth + 1) }
-                is JsonObject -> e.forEach { (k,v) -> if (k == key) found += v else walk(v, depth + 1) }
+                is JsonObject -> e.forEach { (k, v) -> if (k == key) found += v else walk(v, depth + 1) }
                 else -> Unit
             }
         }
         walk(element, 0); return found
     }
     private fun findPercent(element: JsonElement): Long? = values(element, "percentDurationWatched")
-        .firstNotNullOfOrNull { (it as? JsonPrimitive)?.longOrNull }?.coerceIn(0,100)
+        .firstNotNullOfOrNull { (it as? JsonPrimitive)?.longOrNull }?.coerceIn(0, 100)
     internal fun duration(value: String?): Long {
         val parts = value?.trim()?.split(':') ?: return -1
         if (parts.size !in 2..3 || parts.any { it.toLongOrNull() == null }) return -1

@@ -14,11 +14,11 @@ class DefaultVideoRepository @Inject constructor(
     private val positions: ResumeDao,
     private val playbackCache: PlaybackPrefetcher,
 ) : VideoRepository {
-    override suspend fun comments(url: String,continuation: Continuation?) = anonymous.comments(url,continuation)
+    override suspend fun comments(url: String, continuation: Continuation?) = anonymous.comments(url, continuation)
     override suspend fun engagement(url: String) = account.engagement(url)
-    override suspend fun rate(url: String,rating: Rating,previous: Rating) = account.rate(url,rating,previous)
-    override suspend fun subscribe(channelId: String,subscribe: Boolean) = account.subscribe(channelId,subscribe)
-    override suspend fun startWatch(url: String,position: Double) = account.startWatch(url,position)
+    override suspend fun rate(url: String, rating: Rating, previous: Rating) = account.rate(url, rating, previous)
+    override suspend fun subscribe(channelId: String, subscribe: Boolean) = account.subscribe(channelId, subscribe)
+    override suspend fun startWatch(url: String, position: Double) = account.startWatch(url, position)
     override suspend fun reportWatch(ticket: WatchTicket, segments: List<WatchSegment>, position: Double) = account.reportWatch(ticket, segments, position)
     /** Most recent search results first; the oldest fall out past 100 instead of the feed emptying. */
     private val local = object : LinkedHashMap<String, Video>() {

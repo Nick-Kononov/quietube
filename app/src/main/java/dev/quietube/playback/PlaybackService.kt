@@ -72,8 +72,8 @@ class PlaybackService : MediaSessionService() {
                     if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) || events.contains(Player.EVENT_POSITION_DISCONTINUITY)
                         || events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
                         savePosition()
-                        history.sample(player.currentMediaItem?.mediaId,player.currentPosition,player.isPlaying,
-                            events.contains(Player.EVENT_POSITION_DISCONTINUITY),player.playbackParameters.speed)
+                        history.sample(player.currentMediaItem?.mediaId, player.currentPosition, player.isPlaying,
+                            events.contains(Player.EVENT_POSITION_DISCONTINUITY), player.playbackParameters.speed)
                     }
                 }
                 override fun onPlayerError(error: PlaybackException) {
@@ -144,7 +144,7 @@ class PlaybackService : MediaSessionService() {
             var tick = 0
             while (isActive) {
                 delay(1_000)
-                history.sample(player.currentMediaItem?.mediaId,player.currentPosition,player.isPlaying,speed = player.playbackParameters.speed)
+                history.sample(player.currentMediaItem?.mediaId, player.currentPosition, player.isPlaying, speed = player.playbackParameters.speed)
                 if (++tick % 5 == 0) savePosition()
                 if (tick % 15 == 0 && player.isPlaying) metrics?.summary(player.videoSize.height)
             }
@@ -220,7 +220,7 @@ class PlaybackService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
     override fun onDestroy() {
         val finalSave = savePosition()
-        history.sample(player.currentMediaItem?.mediaId,player.currentPosition,false,speed = player.playbackParameters.speed)
+        history.sample(player.currentMediaItem?.mediaId, player.currentPosition, false, speed = player.playbackParameters.speed)
         val finalReport = history.finish()
         ticker?.cancel()
         resolution?.cancel()

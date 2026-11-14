@@ -33,7 +33,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.stateIn
 
-data class AccountUiState(val busy: Boolean = false,val message: String? = null,
+data class AccountUiState(val busy: Boolean = false, val message: String? = null,
     val deviceLogin: DeviceLogin? = null, val signingIn: Boolean = false)
 @HiltViewModel
 class AccountViewModel @Inject constructor(
@@ -74,13 +74,13 @@ class AccountViewModel @Inject constructor(
         if (mutable.value.busy) return
         operation?.cancel()
         operation = viewModelScope.launch {
-            mutable.value = AccountUiState(true,"Requesting a device code…",signingIn = true)
+            mutable.value = AccountUiState(true, "Requesting a device code…", signingIn = true)
             var stage = "requesting a device code"
             try {
                 sessions.initialize()
                 val expectedRevision = sessions.status.value.revision
                 val login = tv.start()
-                mutable.value = AccountUiState(true,"Approve the code in Chrome, then return here. Google may call this YouTube on TV.",login,signingIn = true)
+                mutable.value = AccountUiState(true, "Approve the code in Chrome, then return here. Google may call this YouTube on TV.", login, signingIn = true)
                 stage = "waiting for approval"
                 var interval = login.intervalSeconds
                 var failures = 0
@@ -99,7 +99,7 @@ class AccountViewModel @Inject constructor(
                         DevicePoll.Denied -> { mutable.value = AccountUiState(message = "Authorization was declined. No account session was saved."); return@launch }
                         DevicePoll.Expired -> { mutable.value = AccountUiState(message = "The device code expired. Request a new code."); return@launch }
                         is DevicePoll.Granted -> {
-                            mutable.value = AccountUiState(true,"Google approved. Testing authenticated Home…",signingIn = true)
+                            mutable.value = AccountUiState(true, "Google approved. Testing authenticated Home…", signingIn = true)
                             stage = "checking authenticated Home"
                             val probe = tv.probe(response.session)
                             val home = withContext(Dispatchers.Default) { AccountPageParser.parse(probe) }
@@ -108,7 +108,7 @@ class AccountViewModel @Inject constructor(
                                 return@launch
                             }
                             stage = "checking token refresh"
-                            mutable.value = AccountUiState(true,"Home is readable. Checking automatic token refresh…",signingIn = true)
+                            mutable.value = AccountUiState(true, "Home is readable. Checking automatic token refresh…", signingIn = true)
                             delay(1000)
                             val refreshed = tv.refreshCandidate(response.session)
                             delay(1000)
@@ -119,7 +119,7 @@ class AccountViewModel @Inject constructor(
                             }
                             currentCoroutineContext().ensureActive()
                             if (sessions.status.value.revision == expectedRevision) { client.clear(); source.clear() }
-                            val saved = sessions.saveDeviceIfRevision(refreshed,expectedRevision)
+                            val saved = sessions.saveDeviceIfRevision(refreshed, expectedRevision)
                             mutable.value = AccountUiState(message = if (saved) "Device sign-in, Home and token-refresh checks succeeded. Open Home to check your recommendations."
                                 else "The session changed during sign-in. Please try again.")
                             return@launch
@@ -164,7 +164,7 @@ class AccountViewModel @Inject constructor(
                 when (val validation = client.validate(cookies)) {
                     is Outcome.Success -> {
                         if (sessions.status.value.revision == expectedRevision) { client.clear(); source.clear() }
-                        mutable.value = if (sessions.saveIfRevision(validation.value,expectedRevision))
+                        mutable.value = if (sessions.saveIfRevision(validation.value, expectedRevision))
                             AccountUiState(message = "Signed in. Your feeds are ready.")
                         else AccountUiState(message = "Session changed during import. Please try again.")
                     }

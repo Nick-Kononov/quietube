@@ -15,9 +15,9 @@ private class CachedPage(val at: Long, val page: VideoPage)
 @Singleton
 class InnerTubeAccountSource @Inject constructor(private val client: InnerTubeClient, private val sessions: EncryptedSessionStore, private val actions: YouTubeActions) : AccountSource {
     override suspend fun engagement(url: String) = actions.engagement(url)
-    override suspend fun rate(url: String,rating: Rating,previous: Rating) = actions.rate(url,rating,previous).also { if (it is Outcome.Success) cache.clear() }
-    override suspend fun subscribe(channelId: String,subscribe: Boolean) = actions.subscribe(channelId,subscribe).also { if (it is Outcome.Success) cache.clear() }
-    override suspend fun startWatch(url: String,position: Double) = actions.startWatch(url,position)
+    override suspend fun rate(url: String, rating: Rating, previous: Rating) = actions.rate(url, rating, previous).also { if (it is Outcome.Success) cache.clear() }
+    override suspend fun subscribe(channelId: String, subscribe: Boolean) = actions.subscribe(channelId, subscribe).also { if (it is Outcome.Success) cache.clear() }
+    override suspend fun startWatch(url: String, position: Double) = actions.startWatch(url, position)
     override suspend fun reportWatch(ticket: WatchTicket, segments: List<WatchSegment>, position: Double) = actions.reportWatch(ticket, segments, position).also { if (it is Outcome.Success) cache.clear() }
     private val progress = ConcurrentHashMap<String, Long>()
     private val cache = ConcurrentHashMap<String, CachedPage>()
@@ -70,7 +70,7 @@ class InnerTubeAccountSource @Inject constructor(private val client: InnerTubeCl
             if (parsed.skipped && parsed.videos.isEmpty() && parsed.playlists.isEmpty())
                 return@withContext Outcome.Failure(VideoError.ExtractionBroken)
             parsed.videos.forEach { video -> video.resumePositionMs?.let { progress[video.url] = it } }
-            val result = VideoPage(parsed.videos, parsed.token?.let { AccountCursor(id,it,current.revision) },
+            val result = VideoPage(parsed.videos, parsed.token?.let { AccountCursor(id, it, current.revision) },
                 skippedItems = parsed.skipped, playlists = parsed.playlists)
             if (continuation == null) cache[id] = CachedPage(System.currentTimeMillis(), result)
             Outcome.Success(result)

@@ -8,12 +8,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 
 @Composable
-internal fun RefreshBox(refreshing: Boolean,refresh: () -> Unit,modifier: Modifier = Modifier,content: @Composable BoxScope.() -> Unit) {
+internal fun RefreshBox(refreshing: Boolean, refresh: () -> Unit, modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
     val state = rememberPullToRefreshState()
     val animate = rememberAnimationsEnabled()
-    PullToRefreshBox(isRefreshing = refreshing,onRefresh = refresh,state = state,modifier = modifier,
+    PullToRefreshBox(isRefreshing = refreshing, onRefresh = refresh, state = state, modifier = modifier,
         indicator = {
-            if (refreshing && !animate) AppLoadingIndicator(Modifier.align(Alignment.TopCenter),contained = true)
-            else PullToRefreshDefaults.LoadingIndicator(state,refreshing,Modifier.align(Alignment.TopCenter))
-        },content = content)
+            if (refreshing && !animate) AppLoadingIndicator(Modifier.align(Alignment.TopCenter), contained = true)
+            else PullToRefreshDefaults.LoadingIndicator(state, refreshing, Modifier.align(Alignment.TopCenter))
+        }, content = content)
 }

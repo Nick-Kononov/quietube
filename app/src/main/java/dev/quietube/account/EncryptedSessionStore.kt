@@ -52,22 +52,22 @@ class EncryptedSessionStore @Inject constructor(@ApplicationContext context: Con
                 val cipher = Cipher.getInstance("AES/GCM/NoPadding")
                 cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(1, 13)))
                 cipher.updateAAD(AAD)
-                val plain = cipher.doFinal(bytes.copyOfRange(13,bytes.size))
+                val plain = cipher.doFinal(bytes.copyOfRange(13, bytes.size))
                 val text = try { plain.toString(Charsets.UTF_8) } finally { plain.fill(0) }
                 if (text.startsWith("{\"oauth\":")) { deviceSession = DeviceSession.decode(text); null }
                 else SessionCookies.decoded(text)
             }
         } catch (_: Exception) { file.delete(); keyStore().deleteEntry(alias); null }
-        mutableStatus.value = SessionStatus(true,credentials != null || deviceSession != null,mutableStatus.value.revision+1,
+        mutableStatus.value = SessionStatus(true, credentials != null || deviceSession != null, mutableStatus.value.revision+1,
             if (deviceSession != null) SessionMethod.DeviceCode else if (credentials != null) SessionMethod.Cookies else null)
     } }
     @VisibleForTesting suspend fun read(): SessionCookies? { initialize(); return mutex.withLock { credentials } }
     class Snapshot(val cookies: SessionCookies, val revision: Long) { override fun toString() = "SessionSnapshot([redacted])" }
-    suspend fun snapshot(): Snapshot? { initialize(); return mutex.withLock { credentials?.let { Snapshot(it,mutableStatus.value.revision) } } }
+    suspend fun snapshot(): Snapshot? { initialize(); return mutex.withLock { credentials?.let { Snapshot(it, mutableStatus.value.revision) } } }
     private fun writeLocked(cookies: SessionCookies) { writeTextLocked(cookies.encoded()); credentials = cookies; deviceSession = null }
     private fun writeTextLocked(text: String) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE,key()); cipher.updateAAD(AAD)
+        cipher.init(Cipher.ENCRYPT_MODE, key()); cipher.updateAAD(AAD)
         val plain = text.toByteArray(Charsets.UTF_8)
         val bytes = try { byteArrayOf(1) + cipher.iv + cipher.doFinal(plain) } finally { plain.fill(0) }
         val output = file.startWrite()
@@ -75,22 +75,22 @@ class EncryptedSessionStore @Inject constructor(@ApplicationContext context: Con
     }
     @VisibleForTesting suspend fun save(cookies: SessionCookies) = withContext(Dispatchers.IO) { mutex.withLock {
         writeLocked(cookies)
-        mutableStatus.value = SessionStatus(true,true,mutableStatus.value.revision + 1,SessionMethod.Cookies)
+        mutableStatus.value = SessionStatus(true, true, mutableStatus.value.revision + 1, SessionMethod.Cookies)
     } }
     suspend fun saveIfRevision(cookies: SessionCookies, expectedRevision: Long): Boolean = withContext(Dispatchers.IO) { mutex.withLock {
         if (mutableStatus.value.revision != expectedRevision) return@withLock false
         writeLocked(cookies)
-        mutableStatus.value = SessionStatus(true,true,mutableStatus.value.revision + 1,SessionMethod.Cookies)
+        mutableStatus.value = SessionStatus(true, true, mutableStatus.value.revision + 1, SessionMethod.Cookies)
         true
     } }
-    class DeviceSnapshot(val session: DeviceSession,val revision: Long) { override fun toString() = "DeviceSnapshot([redacted])" }
-    suspend fun deviceSnapshot(): DeviceSnapshot? { initialize(); return mutex.withLock { deviceSession?.let { DeviceSnapshot(it,mutableStatus.value.revision) } } }
-    suspend fun saveDeviceIfRevision(session: DeviceSession,expectedRevision: Long): Boolean = withContext(Dispatchers.IO) { mutex.withLock {
+    class DeviceSnapshot(val session: DeviceSession, val revision: Long) { override fun toString() = "DeviceSnapshot([redacted])" }
+    suspend fun deviceSnapshot(): DeviceSnapshot? { initialize(); return mutex.withLock { deviceSession?.let { DeviceSnapshot(it, mutableStatus.value.revision) } } }
+    suspend fun saveDeviceIfRevision(session: DeviceSession, expectedRevision: Long): Boolean = withContext(Dispatchers.IO) { mutex.withLock {
         if (mutableStatus.value.revision != expectedRevision) return@withLock false
         writeTextLocked(session.encoded()); credentials = null; deviceSession = session
-        mutableStatus.value = SessionStatus(true,true,mutableStatus.value.revision+1,SessionMethod.DeviceCode); true
+        mutableStatus.value = SessionStatus(true, true, mutableStatus.value.revision+1, SessionMethod.DeviceCode); true
     } }
-    suspend fun refreshDeviceIfRevision(session: DeviceSession,expectedRevision: Long): Boolean = withContext(Dispatchers.IO) { mutex.withLock {
+    suspend fun refreshDeviceIfRevision(session: DeviceSession, expectedRevision: Long): Boolean = withContext(Dispatchers.IO) { mutex.withLock {
         if (mutableStatus.value.revision != expectedRevision || deviceSession == null) return@withLock false
         writeTextLocked(session.encoded()); deviceSession = session; true
     } }
@@ -101,7 +101,7 @@ class EncryptedSessionStore @Inject constructor(@ApplicationContext context: Con
         val updated = current.updated(headers)
         if (!updated.usable()) {
             credentials = null; file.delete(); keyStore().deleteEntry(alias)
-            mutableStatus.value = SessionStatus(true,false,mutableStatus.value.revision + 1)
+            mutableStatus.value = SessionStatus(true, false, mutableStatus.value.revision + 1)
             return@withLock null
         }
         if (!current.sameContents(updated)) writeLocked(updated)

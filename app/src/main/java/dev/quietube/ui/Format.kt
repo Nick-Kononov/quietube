@@ -13,10 +13,10 @@ internal fun formatDuration(seconds: Long): String? = when {
     seconds >= 3600 -> String.format(Locale.US, "%d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
     else -> String.format(Locale.US, "%d:%02d", seconds / 60, seconds % 60)
 }
-internal fun displayLikeCount(accountCount: String?,publicCount: Long?): String =
+internal fun displayLikeCount(accountCount: String?, publicCount: Long?): String =
     accountCount?.takeIf { it.isNotBlank() } ?: formatLikeCount(publicCount) ?: "—"
 /** Dislikes arrive as digits (Return YouTube Dislike) or as YouTube's own short text. */
-internal fun displayDislikeCount(count: String?,estimated: Boolean): String {
+internal fun displayDislikeCount(count: String?, estimated: Boolean): String {
     val text = count?.toLongOrNull()?.let(::formatLikeCount) ?: count?.takeIf { it.isNotBlank() } ?: return "—"
     return if (estimated) "≈$text" else text
 }

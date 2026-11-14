@@ -124,26 +124,26 @@ fun PlayerScreen(state: PlaybackState, player: Player?, connectionError: Boolean
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { stateDescription = if (detailsExpanded) "Expanded" else "Collapsed" }
                 .clickable(role = Role.Button) { detailsExpanded = !detailsExpanded }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                    Text(state.video?.title ?: "Choose a video from search",style = MaterialTheme.typography.titleMedium,maxLines = 2,
+                    Text(state.video?.title ?: "Choose a video from search", style = MaterialTheme.typography.titleMedium, maxLines = 2,
                         overflow = TextOverflow.Ellipsis)
                 }
-                Icon(if (detailsExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,null)
+                Icon(if (detailsExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null)
             }
-            RatingButtons(engagement,state.video?.likeCount,engagementActions.rate,signInToRate = { snackbar?.let { scope.launch { it.showSnackbar("Sign in to rate") } } })
+            RatingButtons(engagement, state.video?.likeCount, engagementActions.rate, signInToRate = { snackbar?.let { scope.launch { it.showSnackbar("Sign in to rate") } } })
             cast.playingOn?.let { tv ->
                 Row(Modifier.padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Playing on ${tv.name}${if (cast.direct) " · direct" else ""}",style = MaterialTheme.typography.bodySmall,
+                    Text("Playing on ${tv.name}${if (cast.direct) " · direct" else ""}", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
                     if (cast.direct && castActions != null) TextButton(onClick = castActions.stop) { Text("Stop") }
                 }
             }
-            if (connectionError) Text("Could not connect to playback. Close and reopen YouPoop.",modifier = Modifier.padding(horizontal = 20.dp))
+            if (connectionError) Text("Could not connect to playback. Close and reopen YouPoop.", modifier = Modifier.padding(horizontal = 20.dp))
             state.error?.let { error ->
-                Text(error.message(),color = MaterialTheme.colorScheme.error,modifier = Modifier.padding(horizontal = 20.dp))
+                Text(error.message(), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 20.dp))
                 TextButton(onClick = { state.video?.url?.let(play) }) { Text("Retry playback") }
             }
             key(state.video?.url) {
-                PlayerCommunity(comments,commentActions.more,commentActions.refresh,commentActions.pullRefresh,state.related,play,prefetch,Modifier.weight(1f),active = active,thumbnailPrefetch = thumbnailPrefetch)
+                PlayerCommunity(comments, commentActions.more, commentActions.refresh, commentActions.pullRefresh, state.related, play, prefetch, Modifier.weight(1f), active = active, thumbnailPrefetch = thumbnailPrefetch)
             }
         }
     }

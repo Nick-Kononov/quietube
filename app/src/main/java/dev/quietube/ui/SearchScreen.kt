@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(state: SearchState, recent: List<String>, edit: (String) -> Unit, search: (String) -> Unit, more: () -> Unit,
-    clearHistory: () -> Unit, play: (String) -> Unit, back: () -> Unit, expandedChange: (Boolean) -> Unit, prefetch: (List<String>) -> Unit = {},thumbnailPrefetch: (List<ThumbnailRequest>) -> Unit = {}) {
+    clearHistory: () -> Unit, play: (String) -> Unit, back: () -> Unit, expandedChange: (Boolean) -> Unit, prefetch: (List<String>) -> Unit = {}, thumbnailPrefetch: (List<ThumbnailRequest>) -> Unit = {}) {
     val bar = rememberSearchBarState(initialValue = SearchBarValue.Expanded)
     val text = rememberTextFieldState(state.draft)
     val scope = rememberCoroutineScope()
@@ -32,7 +32,7 @@ fun SearchScreen(state: SearchState, recent: List<String>, edit: (String) -> Uni
     val keyboard = LocalSoftwareKeyboardController.current
     if (!expanded) {
         PrefetchVisibleVideos(list, prefetch)
-        PrefetchVisibleThumbnails(list,state.videos,thumbnailPrefetch)
+        PrefetchVisibleThumbnails(list, state.videos, thumbnailPrefetch)
     }
     LaunchedEffect(text) { snapshotFlow { text.text.toString() }.collect(edit) }
     SideEffect { expandedChange(expanded) }
@@ -40,17 +40,17 @@ fun SearchScreen(state: SearchState, recent: List<String>, edit: (String) -> Uni
     val collapse: () -> Unit = { keyboard?.hide(); scope.launch { bar.animateToCollapsed() } }
     val submit: (String) -> Unit = { value -> if (value.isNotBlank()) { text.setTextAndPlaceCursorAtEnd(value); collapse(); search(value) } }
     val input: @Composable () -> Unit = {
-        SearchBarDefaults.InputField(textFieldState = text,searchBarState = bar,onSearch = submit,
+        SearchBarDefaults.InputField(textFieldState = text, searchBarState = bar, onSearch = submit,
             modifier = Modifier.onPreviewKeyEvent { event ->
                 if (event.key != Key.Enter) false else { if (event.type == KeyEventType.KeyUp) submit(text.text.toString()); true }
-            },placeholder = { Text("Search YouTube") },
-            leadingIcon = { IconButton(onClick = { if (expanded) collapse() else back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack,"Back") } },
-            trailingIcon = { if (text.text.isNotEmpty()) IconButton(onClick = { text.setTextAndPlaceCursorAtEnd(""); edit("") }) { Icon(Icons.Rounded.Close,"Clear search") } })
+            }, placeholder = { Text("Search YouTube") },
+            leadingIcon = { IconButton(onClick = { if (expanded) collapse() else back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
+            trailingIcon = { if (text.text.isNotEmpty()) IconButton(onClick = { text.setTextAndPlaceCursorAtEnd(""); edit("") }) { Icon(Icons.Rounded.Close, "Clear search") } })
     }
     Scaffold(contentWindowInsets = WindowInsets(0)) { insets ->
         Column(Modifier.fillMaxSize().padding(insets)) {
-            SearchBar(state = bar,inputField = input,modifier = Modifier.statusBarsPadding().fillMaxWidth().padding(horizontal = 16.dp))
-            ExpandedFullScreenSearchBar(state = bar,inputField = input) {
+            SearchBar(state = bar, inputField = input, modifier = Modifier.statusBarsPadding().fillMaxWidth().padding(horizontal = 16.dp))
+            ExpandedFullScreenSearchBar(state = bar, inputField = input) {
                 LazyColumn(Modifier.fillMaxSize().imePadding()) {
                     if (recent.isNotEmpty()) item {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {

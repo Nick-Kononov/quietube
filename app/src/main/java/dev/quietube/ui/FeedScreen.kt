@@ -35,11 +35,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 fun FeedScreen(state: FeedState, session: SessionStatus,
     search: () -> Unit, account: () -> Unit, refresh: () -> Unit, more: () -> Unit,
     play: (String) -> Unit, playlist: (PlaylistSummary) -> Unit, back: () -> Unit, prefetch: (List<String>) -> Unit = {},
-    pullRefresh: () -> Unit = refresh, retry: () -> Unit = refresh, profile: Profile? = null, reselect: Int = 0, active: Boolean = true,thumbnailPrefetch: (List<ThumbnailRequest>) -> Unit = {}) {
+    pullRefresh: () -> Unit = refresh, retry: () -> Unit = refresh, profile: Profile? = null, reselect: Int = 0, active: Boolean = true, thumbnailPrefetch: (List<ThumbnailRequest>) -> Unit = {}) {
     val listState = rememberLazyListState()
     if (active) {
         PrefetchVisibleVideos(listState, prefetch)
-        PrefetchVisibleThumbnails(listState,state.videos,thumbnailPrefetch)
+        PrefetchVisibleThumbnails(listState, state.videos, thumbnailPrefetch)
     }
     val restoreIndex = remember { listState.firstVisibleItemIndex }
     var restoring by remember { mutableStateOf(restoreIndex > 0 || listState.firstVisibleItemScrollOffset > 0) }
