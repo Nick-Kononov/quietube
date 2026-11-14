@@ -1022,3 +1022,42 @@ graph submission remain unchecked until these files reach `main`; no claim is
 made that the current dependency graph is vulnerability-free. No on-device
 checks were run for this tooling-only change, and the installed app was left
 alone.
+
+## Critical vulnerabilities in Android build tooling
+
+The first submitted dependency graph exposed three critical alerts: Bouncy
+Castle's GOST counter reuse (CVE-2025-14813), its certificate name-constraint
+bypass (CVE-2026-8763), and Netty's fragmented ClientHello SNI fallback
+(CVE-2026-75595). Bouncy Castle 1.79 comes through AGP's SDK/build/signing
+libraries; Netty 4.1.93 and 4.1.110 come through Android's device-test platform
+and emulator-control tooling. Neither library appears in the app's release
+runtime configuration. The presence of a vulnerable build dependency alone
+does not establish that the affected operation is reachable in this project.
+
+Settings now apply targeted version rules before each project's build script
+resolves. Bouncy Castle's existing provider, PKIX and utility modules are aligned
+at 1.85; existing Netty modules are aligned at 4.1.137.Final, excluding the
+separately versioned tcnative artifacts. The rules cover both buildscript and
+project configurations so lint and device-test tool configurations cannot keep
+an older copy. These versions cover all three critical advisories. Updating AGP
+alone was insufficient: even 9.5.1's SDK library still requests Bouncy Castle
+1.80.2. Remove or revisit the overrides when upstream tooling supplies patched
+versions. No dependency is added to the app and no app network or account
+behaviour changes.
+
+The same graph-generation plugin used by CI was run locally without submitting
+anything. Its complete snapshot contained only Bouncy Castle 1.85 across all
+three modules and Netty 4.1.137.Final across all eleven modules, with no older
+copies. Separate release-runtime dependency reports found neither library.
+The GitHub alerts will remain open until a graph from the patched main branch
+is submitted; no alerts were dismissed or excluded from scanning.
+
+`assembleDebug testDebugUnitTest lintDebug assembleRelease` passed with the
+patched dependencies: 163 tests, no failures, and no lint errors. The online
+lint run refreshed version metadata and reported 41 warnings: 21 existing
+code warnings and 20 dependency-update notices (the earlier offline run had
+only three update notices). No new code warning appeared. The R8 release APK
+was built and signed successfully. No
+on-device checks or device tests were run; the emulator-control and device-test
+execution paths remain unchecked. The installed app was not changed and no
+release was published.
