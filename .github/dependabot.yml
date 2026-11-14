@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      kotlin-plugins:
+        patterns: ["org.jetbrains.kotlin.*"]
+      hilt:
+        patterns: ["com.google.dagger:*", "com.google.dagger.hilt.android"]
+      room:
+        patterns: ["androidx.room:*"]
+      coil:
+        patterns: ["io.coil-kt.coil3:*"]
+      coroutines:
+        patterns: ["org.jetbrains.kotlinx:kotlinx-coroutines-*"]
+      okhttp:
+        patterns: ["com.squareup.okhttp3:*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5

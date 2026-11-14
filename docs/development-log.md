@@ -988,3 +988,37 @@ its element-by-element filter for the same reason.
 Build, unit tests, lint and the R8 release build pass. This change was not
 installed on a device; the first launch after upgrading is the one to watch,
 since it reads the stored session through the new classes.
+
+## Dependency updates and vulnerability alerts
+
+Added Dependabot configuration for weekly Gradle and GitHub Actions update
+PRs, capped at five open version-update PRs per ecosystem. Related Kotlin
+compiler plugins, Hilt, Room, Coil, coroutines and OkHttp artifacts are grouped
+so their versions move together. Versions remain pinned and updates require
+review; there is no auto-merge or automatic release.
+
+Gradle vulnerability scanning needs the resolved dependency graph, including
+transitive libraries, rather than just the declarations in the build scripts.
+A main-only workflow submits that graph to GitHub after pushes and daily, with
+a manual trigger as well. Dependabot alerts and security update PRs were
+enabled in the repository settings and their enabled state was verified through
+the GitHub API. Fix PRs depend on GitHub's advisory coverage and ability to
+update the affected dependency; JitPack artifacts in particular may have gaps.
+This is ongoing alerting, not a PR vulnerability gate or a local lint task.
+
+A separate read-only PR/main workflow runs the debug build, JVM tests and
+Android lint with JDK 17, Platform 37.0 and Build Tools 36.0.0. Actions are pinned
+to release commit hashes, checkout credentials are not retained, and graph
+submission alone receives contents-write permission. Gradle wrapper validation
+is enabled and caching uses GitHub's basic cache provider. No build scans are
+published. Only source/build dependency metadata is involved; the app gains no
+dependency or network integration, and no account data is read or sent.
+
+Verification: `assembleDebug testDebugUnitTest lintDebug` passed using the local
+JDK and offline dependencies: 163 tests, no failures, and 24 existing lint
+warnings with no app/build-source changes. All three YAML files parsed and
+actionlint 1.7.12 passed both workflows. GitHub workflow execution and actual
+graph submission remain unchecked until these files reach `main`; no claim is
+made that the current dependency graph is vulnerability-free. No on-device
+checks were run for this tooling-only change, and the installed app was left
+alone.
