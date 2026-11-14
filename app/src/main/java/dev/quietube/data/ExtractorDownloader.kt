@@ -25,7 +25,7 @@ class ExtractorDownloader @Inject constructor(private val client: OkHttpClient) 
         return client.newCall(builder.method(method, body).build()).execute().use { response ->
             if (!response.isSuccessful) throw HttpFailure(response.code)
             Response(response.code, response.message, response.headers.toMultimap(),
-                response.body?.string().orEmpty(), response.request.url.toString())
+                response.body.string(), response.request.url.toString())
         }
     }
 

@@ -110,7 +110,7 @@ class InnerTubeClient @Inject constructor(@AccountHttp private val http: OkHttpC
             response.code == 404 -> throw AccountFailure(VideoError.ContentUnavailable)
             !response.isSuccessful -> throw AccountFailure(VideoError.Network)
         }
-        Fetched(response.body?.string() ?: throw AccountFailure(VideoError.ExtractionBroken), updated)
+        Fetched(response.body.string(), updated)
     }
     fun clear() { http.dispatcher.cancelAll(); cached = null; configuredAt = 0; revision = -1 }
     companion object {

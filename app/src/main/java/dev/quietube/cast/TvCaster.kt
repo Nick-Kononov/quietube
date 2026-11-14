@@ -256,7 +256,7 @@ class TvCaster @Inject constructor(private val repository: VideoRepository,
             .post(FormBody.Builder().add("pairing_code", pairing).build()).build()
         return http.newCall(request).await().use { response ->
             if (!response.isSuccessful) return null
-            runCatching { json.decodeFromString(Pairing.serializer(), response.body!!.string()) }.getOrNull()?.screen?.loungeToken
+            runCatching { json.decodeFromString(Pairing.serializer(), response.body.string()) }.getOrNull()?.screen?.loungeToken
         }
     }
 
@@ -269,7 +269,7 @@ class TvCaster @Inject constructor(private val repository: VideoRepository,
         val request = Request.Builder().url(url).header("Origin", "https://www.youtube.com").post(body).build()
         return http.newCall(request).await().use { response ->
             check(response.isSuccessful) { "YouTube rejected the TV session (${response.code})" }
-            response.body!!.string()
+            response.body.string()
         }
     }
 
