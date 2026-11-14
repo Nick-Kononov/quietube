@@ -894,7 +894,7 @@ The PiP check rendered zero UI frames over two seconds with its refresh preferen
 cleared. All 154 offline tests and builds passed, with no new lint findings.
 Temporary stay-awake was restored; global adaptive refresh remains enabled.
 
-## Review fixes and restructuring (unreleased)
+## Review fixes and restructuring (0.5.9)
 
 A read-through of the whole app found four defects, several avoidable requests
 and a few structures that had grown hard to read. Nothing here adds a feature,
@@ -962,7 +962,7 @@ and nothing is orphaned. Not checked on the device: the sign-in and sign-out
 flows, the YouTube-app (Lounge) cast, and casting a second video over a
 running one.
 
-## Typed JSON for fixed-shape payloads (unreleased)
+## Typed JSON for fixed-shape payloads (0.5.9)
 
 A review suggested replacing hand-written JSON reading with annotated
 kotlinx.serialization classes. That was applied where the shape is fixed and
