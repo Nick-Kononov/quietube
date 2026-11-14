@@ -37,8 +37,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
         isCoreLibraryDesugaringEnabled = true
     }
-    // Hilt's @ApplicationContext/@Inject on constructor properties: keep today's target, silence the migration warning.
-    kotlin { compilerOptions { freeCompilerArgs.add("-Xannotation-default-target=param-property") } }
     packaging { resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*") }
 }
 dependencies {
