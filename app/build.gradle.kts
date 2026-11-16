@@ -56,7 +56,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.navigation:navigation-compose:2.10.2")
-    implementation("androidx.navigationevent:navigationevent-compose:1.1.2") // Observes the back gesture for the Settings-style preview.
+    implementation("androidx.navigationevent:navigationevent-compose:1.2.0") // Observes the back gesture for the Settings-style preview.
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
